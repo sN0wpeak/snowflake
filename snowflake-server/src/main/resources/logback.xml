@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration scan="true" scanPeriod="30 seconds">
+
+	<property name="log_base" value="../logs"/>
+	<property name="biz_name" value="sqlparser"/>
+
+	<appender name="stdout" class="ch.qos.logback.core.ConsoleAppender">
+		<layout class="ch.qos.logback.classic.PatternLayout">
+			<pattern>[%d{yyyy-MM-dd HH:mm:ss.SSS}][%level][%logger{0}][%method][%L][logId:%X{logId}] - %msg%n</pattern>
+		</layout>
+	</appender>
+
+	<appender name="shuidi-biz" class="ch.qos.logback.core.rolling.RollingFileAppender">
+		<File>${log_base}/shuidi-${biz_name}-biz.log</File>
+		<rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+			<FileNamePattern>${log_base}/shuidi-${biz_name}-biz.log.%d{yyyy.MM.dd.HH}</FileNamePattern>
+			<maxHistory>168</maxHistory>
+		</rollingPolicy>
+		<encoder>
+			<Pattern>[%d{yyyy-MM-dd HH:mm:ss.SSS}][%level][%logger{0}][%method][%L][logId:%X{logId}] - %msg%n</Pattern>
+		</encoder>
+	</appender>
+
+	<appender name="shuidi-invoke" class="ch.qos.logback.core.rolling.RollingFileAppender">
+		<File>${log_base}/shuidi-${biz_name}-invoke.log</File>
+		<rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+			<FileNamePattern>${log_base}/shuidi-${biz_name}-invoke.log.%d{yyyy.MM.dd.HH}</FileNamePattern>
+			<maxHistory>168</maxHistory>
+		</rollingPolicy>
+		<encoder>
+			<Pattern>[%d{yyyy-MM-dd HH:mm:ss.SSS}][%level][%logger{0}][%method][%L][logId:%X{logId}] - %msg%n</Pattern>
+		</encoder>
+	</appender>
+
+	<appender name="shuidi-biz-stat" class="ch.qos.logback.core.rolling.RollingFileAppender">
+		<File>${log_base}/shuidi-${biz_name}-biz-stat.log</File>
+		<rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+			<FileNamePattern>${log_base}/shuidi-${biz_name}-biz-stat.log.%d{yyyy.MM.dd.HH}</FileNamePattern>
+			<maxHistory>168</maxHistory>
+		</rollingPolicy>
+		<encoder>
+			<Pattern>[time=%d{yyyy-MM-dd HH:mm:ss.SSS}][logId=%X{logId}]%msg%n</Pattern>
+		</encoder>
+	</appender>
+
+	<appender name="shuidi-exception" class="ch.qos.logback.core.rolling.RollingFileAppender">
+		<File>${log_base}/shuidi-${biz_name}-exception.log</File>
+		<rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+			<FileNamePattern>${log_base}/shuidi-${biz_name}-exception.log.%d{yyyy.MM.dd.HH}</FileNamePattern>
+			<maxHistory>168</maxHistory>
+		</rollingPolicy>
+		<encoder>
+			<Pattern>[%d{yyyy-MM-dd HH:mm:ss.SSS}][%level][%logger{0}][%method][%L][logId:%X{logId}] - %msg%n</Pattern>
+		</encoder>
+	</appender>
+
+	<appender name="shuidi-sql" class="ch.qos.logback.core.rolling.RollingFileAppender">
+		<File>${log_base}/shuidi-${biz_name}-sql.log</File>
+		<rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+			<FileNamePattern>${log_base}/shuidi-${biz_name}-sql.log.%d{yyyy.MM.dd.HH}</FileNamePattern>
+			<maxHistory>168</maxHistory>
+		</rollingPolicy>
+		<encoder>
+			<Pattern>[%d{yyyy-MM-dd HH:mm:ss.SSS}][%level][%logger{0}][%method][%L][logId:%X{logId}] - %msg%n</Pattern>
+		</encoder>
+	</appender>
+
+	<logger name="com.shuidihuzhu.tools" additivity="false" level="INFO">
+		<appender-ref ref="shuidi-biz"/>
+	</logger>
+	<logger name="com.shuidihuzhu.api.exceptions" additivity="false" level="INFO">
+		<appender-ref ref="shuidi-exception"/>
+	</logger>
+	<logger name="com.shuidihuzhu.dao" additivity="false" level="INFO">
+		<appender-ref ref="shuidi-sql"/>
+	</logger>
+	<logger name="com.ibatis" additivity="false" level="INFO">
+		<appender-ref ref="shuidi-sql"/>
+	</logger>
+	<logger name="java.sql.Statement" additivity="false" level="INFO">
+		<appender-ref ref="shuidi-sql"/>
+	</logger>
+	<logger name="java.sql.PreparedStatement" additivity="false" level="INFO">
+		<appender-ref ref="shuidi-sql"/>
+	</logger>
+
+	<logger name="slow-sql-logger" additivity="false" level="INFO">
+		<appender-ref ref="shuidi-sql"/>
+	</logger>
+
+	<!--<logger name="java.sql.Connection" level="DEBUG" />-->
+	<!--<logger name="java.sql.Statement" level="DEBUG" />-->
+	<!--<logger name="java.sql.PreparedStatement" level="DEBUG" />-->
+	<!--<logger name="org.springframework.jdbc" level="DEBUG"/>-->
+	<!--<logger name="org.springframework.transaction" level="DEBUG"/>-->
+	<!--<logger name="java.sql.ResultSet" level="DEBUG" />-->
+
+	<root level="INFO">
+		<appender-ref ref="shuidi-biz"/>
+		<appender-ref ref="stdout"/>
+	</root>
+
+</configuration>
