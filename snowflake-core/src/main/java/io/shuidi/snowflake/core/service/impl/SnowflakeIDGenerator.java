@@ -62,7 +62,7 @@ public final class SnowflakeIDGenerator implements IDGenerator {
 
 	private static final long TIMESTAMP_LEFT_SHIFT_BITS = WORKER_ID_LEFT_SHIFT_BITS + WORKER_ID_BITS;
 
-	private static final long WORKER_ID_MAX_VALUE = 1L << WORKER_ID_BITS;
+	public static final long WORKER_ID_MAX_VALUE = 1L << WORKER_ID_BITS;
 
 	private static long workerId;
 

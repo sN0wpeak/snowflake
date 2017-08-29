@@ -12,6 +12,13 @@ public class SnowflakeConfig {
 
 	@Value("${snowflake.config.workerIdZkPath}")
 	private String workerIdZkPath;
+
+	public String getLeaderPath() {
+		return leaderPath;
+	}
+
+	@Value("${snowflake.config.leaderPath}")
+	private String leaderPath;
 	private boolean skipSanityChecks = false;
 	private long startupSleepMs = 10000;
 	private int datacenterId = 0;

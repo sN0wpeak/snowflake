@@ -24,6 +24,11 @@
 			<version>${curator.version}</version>
 		</dependency>
 		<dependency>
+			<groupId>org.apache.zookeeper</groupId>
+			<artifactId>zookeeper</artifactId>
+			<version>3.4.9</version>
+		</dependency>
+		<dependency>
 			<groupId>org.redisson</groupId>
 			<artifactId>redisson</artifactId>
 			<version>3.1.0</version>

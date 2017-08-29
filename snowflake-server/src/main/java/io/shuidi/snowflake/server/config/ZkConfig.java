@@ -1,5 +1,10 @@
 package io.shuidi.snowflake.server.config;
 
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
@@ -8,8 +13,11 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration
 public class ZkConfig {
+	@Value("${snowflake.zk.hosts}")
 	private String connectionString;
+	@Value("${snowflake.zk.connectionTimeout}")
 	private int connectionTimeoutMs = 3000;
+	@Value("${snowflake.zk.sessionTimeout}")
 	private int sessionTimeoutMs = 10000;
 
 	public String getConnectionString() {
@@ -22,5 +30,16 @@ public class ZkConfig {
 
 	public int getSessionTimeoutMs() {
 		return sessionTimeoutMs;
+	}
+
+	@Bean
+	public CuratorFramework zkClient() {
+		ExponentialBackoffRetry retryPolicy = new ExponentialBackoffRetry(1000, 3);
+		return CuratorFrameworkFactory.builder()
+		                              .connectString(getConnectionString())
+		                              .retryPolicy(retryPolicy)
+		                              .connectionTimeoutMs(getConnectionTimeoutMs())
+		                              .sessionTimeoutMs(getSessionTimeoutMs())
+		                              .build();
 	}
 }

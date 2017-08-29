@@ -1,11 +1,15 @@
 package io.shuidi.snowflake.server.server;
 
 import com.alibaba.fastjson.JSONObject;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSortedSet;
+import com.google.common.collect.Sets;
 import io.shuidi.snowflake.core.service.impl.SnowflakeIDGenerator;
 import io.shuidi.snowflake.core.util.http.HttpClientUtil;
 import io.shuidi.snowflake.core.util.http.impl.HttpResponseCallbackHandlerJsonHandler;
 import io.shuidi.snowflake.server.config.SnowflakeConfig;
+import io.shuidi.snowflake.server.enums.ErrorCode;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.leader.CancelLeadershipException;
 import org.apache.curator.framework.recipes.leader.LeaderSelector;
@@ -14,19 +18,25 @@ import org.apache.curator.framework.state.ConnectionState;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
+import org.apache.zookeeper.WatchedEvent;
+import org.apache.zookeeper.Watcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.HttpServerErrorException;
 
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Stream;
+
+import static io.shuidi.snowflake.core.service.impl.SnowflakeIDGenerator.WORKER_ID_MAX_VALUE;
 
 /**
  * Author: Alvin Tian
@@ -34,7 +44,7 @@ import java.util.concurrent.TimeUnit;
  */
 
 @Service
-public class SnowflakeServer implements LeaderSelectorListener, InitializingBean, AutoCloseable {
+public class SnowflakeServer implements LeaderSelectorListener, InitializingBean, AutoCloseable, Watcher {
 	private static Logger LOGGER = LoggerFactory.getLogger(SnowflakeServer.class);
 
 	private static final byte[] NONE = new byte[]{};
@@ -42,16 +52,16 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 	@Autowired
 	SnowflakeConfig snowflakeConfig;
 	@Autowired
-	ZkClient zkClient;
-	private CuratorFramework client;
+	private CuratorFramework zkClient;
 	private LeaderSelector leaderSelector;
 	private volatile boolean isLeader = false;
-	private volatile CountDownLatch leaderLatch;
+	public static final Set<Integer> ALL_WORKER_IDS = ImmutableSortedSet.copyOf(Stream.iterate(0, a -> ++a).limit(1024).iterator());
 
-	private String leaderPath = "snowleader";
+	private int workerId;
 
 	public void start() throws Exception {
 		LOGGER.info("start SnowflakeServer... ip: {}", getHostname());
+		zkClient.start();
 		leaderSelector.start();
 		while (!leaderSelector.hasLeadership()) {
 			Thread.sleep(1000);
@@ -59,29 +69,42 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 		registerWorkerId(fetchWorkerId());
 	}
 
+
 	public boolean isLeader() {
 		return isLeader;
 	}
 
+	public synchronized int allocWorkerId() throws Exception {
+		Set<Integer> diff = Sets.difference(ALL_WORKER_IDS, peers().keySet());
+		Optional<Integer> optional = diff.stream().findFirst();
+		return optional.isPresent() ? optional.get() : ErrorCode.NOT_MORE_WORKER_ID.getCode();
+	}
+
+
 	private int fetchWorkerId() throws Exception {
-		String path = "/api/snowflake/get-fetch-id";
-		String url = "http://" + leaderSelector.getLeader().getId() + ":" + snowflakeConfig.getPort() + path;
-		int tries = 0;
-		while (true) {
-			try {
-				JSONObject result =
-						HttpClientUtil.execute(new HttpGet(url), new HttpResponseCallbackHandlerJsonHandler<>(JSONObject.class));
-				if (result.getInteger("code") == 0) {
-					return result.getJSONObject("data").getInteger("workerId");
-				} else {
-					LOGGER.error("call fetchWorkerId error {}", result.toJSONString());
-					throw new IllegalStateException(result.getString("msg"));
-				}
-			} catch (IOException | HttpServerErrorException e) {
-				if (tries++ > 2) {
-					throw e;
-				} else {
-					tries++;
+		if (isLeader()) {
+			return allocWorkerId();
+		} else {
+			String path = "/api/snowflake/get-alloc-workerid";
+			String url = "http://" + leaderSelector.getLeader().getId() + ":" + snowflakeConfig.getPort() + path;
+			int tries = 0;
+			while (true) {
+				try {
+					JSONObject result =
+							HttpClientUtil.execute(new HttpGet(url), new HttpResponseCallbackHandlerJsonHandler<>(JSONObject.class));
+					if (result.getInteger("code") == 0) {
+						return result.getInteger("data").getInteger("workerId");
+					} else {
+						LOGGER.error("call fetchWorkerId error {}", result.toJSONString());
+						throw new IllegalStateException(result.getString("msg"));
+					}
+				} catch (IOException | HttpServerErrorException e) {
+					if (tries++ > 2) {
+						throw e;
+					} else {
+						tries++;
+						Thread.sleep(1000);
+					}
 				}
 			}
 		}
@@ -89,13 +112,15 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 
 
 	public void registerWorkerId(int workerId) throws Exception {
-		SnowflakeIDGenerator.setWorkerId(workerId);
+		Preconditions.checkArgument(workerId >= 0L && workerId < WORKER_ID_MAX_VALUE);
 		int tries = 0;
 		while (true) {
 			try {
-				client.create()
-				      .forPath("%s/%s".format(snowflakeConfig.getWorkerIdZkPath(), workerId + ""),
-				               (getHostname() + ":" + snowflakeConfig.getPort()).getBytes());
+				zkClient.create().withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
+				        .forPath("%s/%s".format(snowflakeConfig.getWorkerIdZkPath(), workerId + ""),
+				                 (getHostname() + ":" + snowflakeConfig.getPort()).getBytes());
+				SnowflakeIDGenerator.setWorkerId(workerId);
+				this.workerId = workerId;
 				return;
 			} catch (Exception e) {
 				LOGGER.error("registerWorkerId", e);
@@ -133,13 +158,18 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 		 */
 		ImmutableMap.Builder<Integer, Peer> peerBuilder = ImmutableMap.builder();
 		try {
-			client.getData().forPath(snowflakeConfig.getWorkerIdZkPath());
+			zkClient.getData().forPath(snowflakeConfig.getWorkerIdZkPath());
 		} catch (Exception e) {
-			client.create().withMode(CreateMode.PERSISTENT).forPath(snowflakeConfig.getWorkerIdZkPath(), NONE);
+			zkClient.create().withMode(CreateMode.PERSISTENT).forPath(snowflakeConfig.getWorkerIdZkPath(), NONE);
 		}
-		List<String> children = client.getChildren().forPath(snowflakeConfig.getWorkerIdZkPath());
+		List<String> children = zkClient.getChildren().forPath(snowflakeConfig.getWorkerIdZkPath());
 		for (String child : children) {
-			String peer = new String(client.getData().forPath("%s/%s".format(snowflakeConfig.getWorkerIdZkPath(), child)));
+			String chaildPath = "%s/%s".format(snowflakeConfig.getWorkerIdZkPath(), child);
+			LOGGER.info(chaildPath);
+			String peer = new String(zkClient.getData().forPath(chaildPath));
+			if (StringUtils.isEmpty(peer)) {
+				continue;
+			}
 			String[] list = peer.split(":");
 			peerBuilder.put(Integer.valueOf(list[1]), new Peer(list[0], Integer.valueOf(list[0])));
 		}
@@ -151,14 +181,17 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 	@Override
 	public void takeLeadership(CuratorFramework curatorFramework) throws Exception {
 		isLeader = true;
-		leaderLatch = new CountDownLatch(1);
 		LOGGER.info("I'm leader {}", getHostname());
+		zkClient.getChildren().usingWatcher(this).forPath(snowflakeConfig.getWorkerIdZkPath());
 		while (isLeader) {
-			if (!snowflakeConfig.isSkipSanityChecks()) {
-				sanityCheckPeers();
+			try {
+				if (!snowflakeConfig.isSkipSanityChecks()) {
+					sanityCheckPeers();
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
-
-			leaderLatch.await(30, TimeUnit.SECONDS);
+			Thread.sleep(30000);
 		}
 
 	}
@@ -166,16 +199,19 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 	@Override
 	public void stateChanged(CuratorFramework curatorFramework, ConnectionState connectionState) {
 		if (curatorFramework.getConnectionStateErrorPolicy().isErrorState(connectionState)) {
-			isLeader = false;
-			leaderLatch.countDown();
+			reset();
 			throw new CancelLeadershipException();
 		}
 	}
 
+	private void reset() {
+		isLeader = false;
+	}
+
 	@Override
 	public void afterPropertiesSet() throws Exception {
-		client = zkClient.getClient();
-		leaderSelector = new LeaderSelector(client, leaderPath, this);
+		leaderSelector = new LeaderSelector(zkClient, snowflakeConfig.getLeaderPath(), this);
+		leaderSelector.autoRequeue();
 	}
 
 	@Override
@@ -183,10 +219,39 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 		leaderSelector.close();
 	}
 
-	public static void main(String[] args) throws UnknownHostException {
-		System.out.println(new SnowflakeServer().getHostname());
+	public int getWorkerId() {
+		return workerId;
 	}
 
+	@Override
+	public void process(WatchedEvent watchedEvent) {
+		if (isLeader()) {
+			LOGGER.info("", watchedEvent);
+			if (watchedEvent.getState() == Event.KeeperState.Disconnected) {
 
+			} else if (watchedEvent.getState() == Event.KeeperState.SyncConnected) {
+
+			}
+		}
+	}
+
+	public static class Peer {
+		private String host;
+		private int port;
+
+		public String getHost() {
+			return host;
+		}
+
+		public int getPort() {
+			return port;
+		}
+
+		public Peer(String host, int port) {
+
+			this.host = host;
+			this.port = port;
+		}
+	}
 
 }

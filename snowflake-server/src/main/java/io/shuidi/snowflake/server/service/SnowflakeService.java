@@ -24,21 +24,12 @@ public class SnowflakeService implements InitializingBean {
 	@Autowired
 	SnowflakeServer snowflakeServer;
 
-	private static final Set<Integer> ALL_WORKER_IDS = ImmutableSortedSet.copyOf(Stream.iterate(0, a -> ++a).limit(1024).iterator());
 
 
-	public Number generateId() {
+	public long generateId() {
 		return snowflakeIDGenerator.generateId();
 	}
 
-	public int generateWorkId() {
-		if (snowflakeServer.isLeader()) {
-
-			return 1;
-		} else {
-			return ErrorCode.NOT_LEADER.getCode();
-		}
-	}
 
 
 	@Override
@@ -46,4 +37,16 @@ public class SnowflakeService implements InitializingBean {
 		snowflakeServer.start();
 	}
 
+	public int getWorkerId() {
+		return snowflakeServer.getWorkerId();
+	}
+
+	public int allocWorkerId() {
+		if (snowflakeServer.isLeader()) {
+
+			return 1;
+		} else {
+			return ErrorCode.NOT_LEADER.getCode();
+		}
+	}
 }
