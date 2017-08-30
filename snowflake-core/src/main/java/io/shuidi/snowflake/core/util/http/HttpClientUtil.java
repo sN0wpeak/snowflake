@@ -1,5 +1,6 @@
 package io.shuidi.snowflake.core.util.http;
 
+import org.apache.curator.utils.CloseableUtils;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.config.RequestConfig;
@@ -22,7 +23,8 @@ import java.io.IOException;
  * Date: 2017/8/28 17:41
  */
 public class HttpClientUtil {
-	protected static final Logger LOGGER = LoggerFactory.getLogger(HttpClientUtil.class);
+
+	private static final Logger LOGGER = LoggerFactory.getLogger(HttpClientUtil.class);
 
 	/**
 	 * 连接器
@@ -101,12 +103,7 @@ public class HttpClientUtil {
 		} catch (IOException e) {
 			throw e;
 		} finally {
-			if (httpclientResponse != null) {
-				try {
-					httpclientResponse.close();
-				} catch (IOException e) {
-				}
-			}
+			CloseableUtils.closeQuietly(httpclientResponse);
 		}
 	}
 
@@ -117,14 +114,7 @@ public class HttpClientUtil {
 	 * @date 2013-6-16
 	 */
 	public static void close() {
-
-		if (httpclient != null) {
-			try {
-				httpclient.close();
-				httpclient = null;
-			} catch (IOException e) {
-			}
-		}
+		CloseableUtils.closeQuietly(httpclient);
 	}
 
 	public static void init() {
