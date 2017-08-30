@@ -37,9 +37,25 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-lang3</artifactId>
+			<version>3.6</version>
+		</dependency>
+		<dependency>
 			<groupId>io.shuidi</groupId>
 			<artifactId>snowflake-core</artifactId>
 			<version>${parent.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.shuidi</groupId>
+			<artifactId>snowflake-client</artifactId>
+			<version>${parent.version}</version>
+			<exclusions>
+				<exclusion>
+					<groupId>io.shuidi</groupId>
+					<artifactId>snowflake-core</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 
 	</dependencies>

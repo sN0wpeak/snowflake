@@ -1,14 +1,15 @@
 package io.shuidi.snowflake.server.web.controller;
 
 import com.google.common.collect.ImmutableMap;
+import io.shuidi.snowflake.server.enums.ErrorCode;
 import io.shuidi.snowflake.server.service.SnowflakeService;
+import io.shuidi.snowflake.server.web.model.ResultModel;
+import io.shuidi.snowflake.server.web.model.ResultResolver;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.ResponseBody;
-
-import java.util.Map;
 
 /**
  * Author: Alvin Tian
@@ -24,19 +25,36 @@ public class SnowflakeController {
 
 	@RequestMapping(path = "/get-id", method = {RequestMethod.GET}, produces = {"application/json;charset=UTF-8"})
 	@ResponseBody
-	public Map<String, Object> getId() {
-		return ImmutableMap.of("id", snowflakeService.generateId());
+	public ResultModel getId() {
+		return ResultResolver
+				.sendNormalResult(ImmutableMap.of("id", snowflakeService.generateId()));
 	}
 
 	@RequestMapping(path = "/get-worker-id", method = {RequestMethod.GET}, produces = {"application/json;charset=UTF-8"})
 	@ResponseBody
-	public Map<String, Object> getWorkId() {
-		return ImmutableMap.of("workerId", snowflakeService.getWorkerId());
+	public ResultModel getWorkId() {
+		ResultModel resultModel = new ResultModel();
+		int workId = snowflakeService.getWorkerId();
+		if (workId < 0) {
+			resultModel.setCode(workId);
+			resultModel.setMsg(ErrorCode.valueOfCode(workId).getDesc());
+		} else {
+			resultModel = ResultResolver.sendNormalResult(ImmutableMap.of("workerId", workId));
+		}
+		return resultModel;
 	}
 
 	@RequestMapping(path = "/get-alloc-workerid", method = {RequestMethod.GET}, produces = {"application/json;charset=UTF-8"})
 	@ResponseBody
-	public Map<String, Object> getFetchId() {
-		return ImmutableMap.of("workerId", snowflakeService.allocWorkerId());
+	public ResultModel getAllocId() throws Exception {
+		ResultModel resultModel = new ResultModel();
+		int workId = snowflakeService.allocWorkerId();
+		if (workId < 0) {
+			resultModel.setCode(workId);
+			resultModel.setMsg(ErrorCode.valueOfCode(workId).getDesc());
+		} else {
+			resultModel = ResultResolver.sendNormalResult(ImmutableMap.of("workerId", workId));
+		}
+		return resultModel;
 	}
 }

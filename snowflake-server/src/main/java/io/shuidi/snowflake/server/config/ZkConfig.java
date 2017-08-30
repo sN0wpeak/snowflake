@@ -42,4 +42,16 @@ public class ZkConfig {
 		                              .sessionTimeoutMs(getSessionTimeoutMs())
 		                              .build();
 	}
+
+	public void setConnectionString(String connectionString) {
+		this.connectionString = connectionString;
+	}
+
+	public void setConnectionTimeoutMs(int connectionTimeoutMs) {
+		this.connectionTimeoutMs = connectionTimeoutMs;
+	}
+
+	public void setSessionTimeoutMs(int sessionTimeoutMs) {
+		this.sessionTimeoutMs = sessionTimeoutMs;
+	}
 }

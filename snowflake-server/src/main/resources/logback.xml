@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration scan="true" scanPeriod="30 seconds">
 
-	<property name="log_base" value="../logs"/>
-	<property name="biz_name" value="sqlparser"/>
+	<property name="log_base" value="/data/weblogs"/>
+	<property name="biz_name" value="snowflake"/>
 
 	<appender name="stdout" class="ch.qos.logback.core.ConsoleAppender">
 		<layout class="ch.qos.logback.classic.PatternLayout">

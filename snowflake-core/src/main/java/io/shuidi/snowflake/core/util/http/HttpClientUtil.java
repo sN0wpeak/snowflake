@@ -80,7 +80,7 @@ public class HttpClientUtil {
 				}
 			}
 
-			LOGGER.info("execute http request [{}], status code [{}]", requestBody, statusCode);
+			LOGGER.info("execute http url [{}],  request [{}], status code [{}]", request.getURI(), requestBody, statusCode);
 
 			if (statusCode != 200) {
 				throw new HttpServerErrorException(HttpStatus.valueOf(statusCode),

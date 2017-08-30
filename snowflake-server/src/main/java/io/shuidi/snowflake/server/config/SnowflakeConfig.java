@@ -12,11 +12,9 @@ public class SnowflakeConfig {
 
 	@Value("${snowflake.config.workerIdZkPath}")
 	private String workerIdZkPath;
-
 	public String getLeaderPath() {
 		return leaderPath;
 	}
-
 	@Value("${snowflake.config.leaderPath}")
 	private String leaderPath;
 	private boolean skipSanityChecks = false;
@@ -32,6 +30,11 @@ public class SnowflakeConfig {
 
 	public int getPort() {
 		return port;
+	}
+
+
+	public void setServer(String server) {
+		this.server = server;
 	}
 
 	public SnowflakeConfig() {
@@ -54,4 +57,29 @@ public class SnowflakeConfig {
 	public int getDatacenterId() {
 		return datacenterId;
 	}
+
+	public void setWorkerIdZkPath(String workerIdZkPath) {
+		this.workerIdZkPath = workerIdZkPath;
+	}
+
+	public void setLeaderPath(String leaderPath) {
+		this.leaderPath = leaderPath;
+	}
+
+	public void setSkipSanityChecks(boolean skipSanityChecks) {
+		this.skipSanityChecks = skipSanityChecks;
+	}
+
+	public void setStartupSleepMs(long startupSleepMs) {
+		this.startupSleepMs = startupSleepMs;
+	}
+
+	public void setDatacenterId(int datacenterId) {
+		this.datacenterId = datacenterId;
+	}
+
+	public void setPort(int port) {
+		this.port = port;
+	}
+
 }
