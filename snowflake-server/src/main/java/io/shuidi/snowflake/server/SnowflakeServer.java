@@ -301,6 +301,7 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 		LOGGER.info(String.format("%s/%s/%s", watchedEvent.getPath(), watchedEvent.getState(), watchedEvent.getType()));
 		if (isLeader()) {
 			if (watchedEvent.getState() == Event.KeeperState.Disconnected) {
+				callback();
 			} else if (watchedEvent.getState() == Event.KeeperState.SyncConnected) {
 				callback();
 			}
