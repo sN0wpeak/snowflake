@@ -90,7 +90,7 @@ public final class SnowflakeIDGenerator implements IDGenerator {
 	 * @param workerId 工作进程Id
 	 */
 	public void setWorkerId(final long workerId) {
-		if ((workerId >= 0L && workerId < WORKER_ID_MAX_VALUE)) {
+		if (!(workerId >= 0L && workerId < WORKER_ID_MAX_VALUE)) {
 			reporter.incr("exceptions");
 			throw new IllegalArgumentException();
 		}

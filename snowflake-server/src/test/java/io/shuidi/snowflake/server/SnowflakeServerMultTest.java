@@ -1,5 +1,6 @@
 package io.shuidi.snowflake.server;
 
+import io.shuidi.snowflake.client.SnowflakeClient;
 import io.shuidi.snowflake.server.config.SnowflakeConfig;
 import io.shuidi.snowflake.server.config.ZkConfig;
 import org.apache.curator.framework.CuratorFramework;
@@ -75,11 +76,14 @@ public class SnowflakeServerMultTest {
 	}
 
 	@Test
-	public void testWorkID() throws Exception {
+	public void testFlow() throws Exception {
 		int serverSize = 10;
 		ExecutorService executorService = Executors.newCachedThreadPool();
 		ConcurrentLinkedQueue<Process> processes = new ConcurrentLinkedQueue<Process>();
 		CountDownLatch countDownLatch = new CountDownLatch(serverSize);
+		SnowflakeClient snowflakeClient = new SnowflakeClient();
+		CountDownLatch finalCountDownLatch1 = countDownLatch;
+
 		for (int i = 0; i < serverSize; i++) {
 			int finalI = i;
 			executorService.execute(() -> {
@@ -88,7 +92,7 @@ public class SnowflakeServerMultTest {
 					                         .exec("java -jar target/snowflake-server-1.0.0-SNAPSHOT.jar --spring.profiles.active=local --server.port=" +
 					                               (8800 + finalI));
 					processes.add(process);
-					countDownLatch.countDown();
+					finalCountDownLatch1.countDown();
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
@@ -108,9 +112,42 @@ public class SnowflakeServerMultTest {
 					e.printStackTrace();
 				}
 			});
-
 		}
-		Thread.sleep(200000);
+
+		Thread.sleep(60000);
+
+		countDownLatch = new CountDownLatch(serverSize);
+
+		CountDownLatch finalCountDownLatch = countDownLatch;
+
+		for (int i = 0; i < serverSize; i++) {
+			int finalI = i;
+			executorService.execute(new Runnable() {
+				@Override
+				public void run() {
+					int port = (8800 + finalI);
+					try {
+						for (int j = 0; j < 1000; j++) {
+							long id = snowflakeClient.getId("localhost:" + port, "useragent=A" + port);
+							System.out.println(id);
+						}
+					} catch (Exception e) {
+						e.printStackTrace();
+					}
+					finalCountDownLatch.countDown();
+				}
+			});
+		}
+		countDownLatch.await();
+
+		for (int i = 0; i < serverSize; i++) {
+			int port = (8800 + i);
+			System.out.println(snowflakeClient.getReport("localhost:" + port));
+		}
+
+
+
+
 
 		for (Process process : processes) {
 			process.destroy();

@@ -73,7 +73,7 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 	private volatile boolean isLeader = false;
 	public static final Set<Integer> ALL_WORKER_IDS = ImmutableSortedSet.copyOf(Stream.iterate(0, a -> ++a).limit(1024).iterator());
 
-	private int workerId = -1;
+	private volatile int workerId = -1;
 
 	public void start() throws Exception {
 		LOGGER.info("start SnowflakeServer... ip: {}", getHostname());
@@ -82,8 +82,35 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 		while (!hasLeader()) {
 			Thread.sleep(1000);
 		}
-		int workerId = isLeader() ? allocWorkerId() : snowflakeClient.allocWorkerId(getLeaderUrl());
-		registerWorkerId(workerId);
+		initWorkerId();
+	}
+
+	private void initWorkerId() throws Exception {
+		int tries = 0;
+		while (true) {
+			try {
+				int workerId = genWorkid();
+				registerWorkerId(workerId);
+				return;
+			} catch (Exception e) {
+				LOGGER.error("initWorkerId", e);
+				if (e instanceof KeeperException.NodeExistsException) {
+					if (tries > 2) {
+						reporter.incr("exceptions");
+						throw e;
+					} else {
+						tries++;
+						Thread.sleep(1000);
+					}
+				} else {
+					throw e;
+				}
+			}
+		}
+	}
+
+	private int genWorkid() throws Exception {
+		return isLeader() ? allocWorkerId() : snowflakeClient.allocWorkerId(getLeaderUrl());
 	}
 
 
@@ -165,10 +192,12 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 					if (tries > 2) {
 						reporter.incr("exceptions");
 						throw e;
+					} else {
+						tries++;
+						Thread.sleep(1000);
 					}
 				} else {
-					tries++;
-					Thread.sleep(1000);
+					throw e;
 				}
 			}
 		}

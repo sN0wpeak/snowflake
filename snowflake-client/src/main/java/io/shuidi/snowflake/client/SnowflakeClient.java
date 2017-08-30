@@ -6,7 +6,7 @@ import io.shuidi.snowflake.core.util.http.impl.HttpResponseCallbackHandlerJsonHa
 import org.apache.http.client.methods.HttpGet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.util.StringUtils;
 
 import java.io.IOException;
 
@@ -32,7 +32,7 @@ public class SnowflakeClient {
 					LOGGER.error("call allocWorkerId error {}", result.toJSONString());
 					throw new IllegalStateException(result.getString("msg"));
 				}
-			} catch (IOException | HttpServerErrorException e) {
+			} catch (IOException e) {
 				if (tries++ > 2) {
 					throw e;
 				} else {
@@ -54,10 +54,64 @@ public class SnowflakeClient {
 				if (result.getInteger("code") == 0) {
 					return result.getJSONObject("data").getInteger("workerId");
 				} else {
-					LOGGER.error("call allocWorkerId error {}", result.toJSONString());
+					LOGGER.error("call getWorkerId error {}", result.toJSONString());
 					throw new IllegalStateException(result.getString("msg"));
 				}
-			} catch (IOException | HttpServerErrorException e) {
+			} catch (IOException e) {
+				if (tries++ > 2) {
+					throw e;
+				} else {
+					tries++;
+					Thread.sleep(1000);
+				}
+			}
+		}
+	}
+
+	public long getId(String serverHost, String query) throws Exception {
+		int tries = 0;
+		while (true) {
+			try {
+
+				String path = "/api/snowflake/get-id";
+				if (!StringUtils.isEmpty(query)) {
+					path += "?" + query;
+				}
+				String url = "http://" + serverHost + "/" + path;
+				JSONObject result =
+						HttpClientUtil.execute(new HttpGet(url), new HttpResponseCallbackHandlerJsonHandler<>(JSONObject.class));
+				if (result.getInteger("code") == 0) {
+					return result.getJSONObject("data").getLongValue("id");
+				} else {
+					LOGGER.error("call getId error {}", result.toJSONString());
+					throw new IllegalStateException(result.getString("msg"));
+				}
+			} catch (IOException e) {
+				if (tries++ > 2) {
+					throw e;
+				} else {
+					tries++;
+					Thread.sleep(1000);
+				}
+			}
+		}
+	}
+
+	public String getReport(String serverHost) throws Exception {
+		int tries = 0;
+		while (true) {
+			try {
+				String path = "/api/snowflake/report";
+				String url = "http://" + serverHost + "/" + path;
+				JSONObject result =
+						HttpClientUtil.execute(new HttpGet(url), new HttpResponseCallbackHandlerJsonHandler<>(JSONObject.class));
+				if (result.getInteger("code") == 0) {
+					return result.getJSONObject("data").toJSONString();
+				} else {
+					LOGGER.error("call getReport error {}", result.toJSONString());
+					throw new IllegalStateException(result.getString("msg"));
+				}
+			} catch (IOException e) {
 				if (tries++ > 2) {
 					throw e;
 				} else {
