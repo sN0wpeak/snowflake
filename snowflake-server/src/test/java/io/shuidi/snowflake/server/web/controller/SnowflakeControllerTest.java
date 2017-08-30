@@ -1,7 +1,6 @@
 package io.shuidi.snowflake.server.web.controller;
 
 import io.shuidi.snowflake.server.SnowflakeServer;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -14,8 +13,6 @@ import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.result.MockMvcResultHandlers;
 import org.springframework.web.context.WebApplicationContext;
-
-import java.io.InputStream;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -50,12 +47,15 @@ public class SnowflakeControllerTest {
 
 	@Test
 	public void getId() throws Exception {
-		mockMvc.perform(get("/api/snowflake/get-id").header("Content-Type", "application/json;charset=UTF-8"))
+		mockMvc.perform(get("/api/snowflake/get-id?useragent=ACCOUNT").header("Content-Type", "application/json;charset=UTF-8"))
 		       .andDo(MockMvcResultHandlers.print())
 		       .andExpect(status().isOk())
 		       .andExpect(jsonPath("$.code").value(0))
 		       .andExpect(jsonPath("$.data.id").isNumber());
+		mockMvc.perform(get("/api/snowflake/report").header("Content-Type", "application/json;charset=UTF-8"))
+		       .andDo(MockMvcResultHandlers.print());
 	}
+
 
 	private void setContext() throws Exception {
 //		try {
@@ -87,7 +87,7 @@ public class SnowflakeControllerTest {
 	@Test
 	public void getIdWhenNotLeader() throws Exception {
 		snowflakeServer.releaseLeader();
-		mockMvc.perform(get("/api/snowflake/get-id").header("Content-Type", "application/json;charset=UTF-8"))
+		mockMvc.perform(get("/api/snowflake/get-id?useragent=ACCOUNT").header("Content-Type", "application/json;charset=UTF-8"))
 		       .andDo(MockMvcResultHandlers.print())
 		       .andExpect(status().isOk())
 		       .andExpect(jsonPath("$.code").value(0))
@@ -113,6 +113,16 @@ public class SnowflakeControllerTest {
 		       .andExpect(status().isOk())
 		       .andExpect(jsonPath("$.code").value(-2))
 		       .andExpect(jsonPath("$.data.workerId").doesNotExist());
+	}
+
+
+	public static class InTest {
+
+		@Test
+		public void testValidateUa() {
+			System.out.println(new SnowflakeController().validUseragent("AA1"));
+			;
+		}
 	}
 
 

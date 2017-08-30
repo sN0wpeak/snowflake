@@ -1,11 +1,11 @@
 package io.shuidi.snowflake.server;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Sets;
 import io.shuidi.snowflake.client.SnowflakeClient;
+import io.shuidi.snowflake.core.report.Reporter;
 import io.shuidi.snowflake.core.service.impl.SnowflakeIDGenerator;
 import io.shuidi.snowflake.server.config.SnowflakeConfig;
 import io.shuidi.snowflake.server.enums.ErrorCode;
@@ -53,6 +53,10 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 
 	@Autowired
 	SnowflakeConfig snowflakeConfig;
+	@Autowired
+	Reporter reporter;
+	@Autowired
+	SnowflakeIDGenerator snowflakeIDGenerator;
 
 	public void setSnowflakeConfig(SnowflakeConfig snowflakeConfig) {
 		this.snowflakeConfig = snowflakeConfig;
@@ -69,7 +73,7 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 	private volatile boolean isLeader = false;
 	public static final Set<Integer> ALL_WORKER_IDS = ImmutableSortedSet.copyOf(Stream.iterate(0, a -> ++a).limit(1024).iterator());
 
-	private int workerId;
+	private int workerId = -1;
 
 	public void start() throws Exception {
 		LOGGER.info("start SnowflakeServer... ip: {}", getHostname());
@@ -125,6 +129,7 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 			} catch (Exception e) {
 				if (tries > 2) {
 					LOGGER.error("getLeaderUrl", e);
+					reporter.incr("exceptions");
 					throw e;
 				} else {
 					tries++;
@@ -138,7 +143,10 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 
 
 	public void registerWorkerId(int workerId) throws Exception {
-		Preconditions.checkArgument(workerId >= 0L && workerId < WORKER_ID_MAX_VALUE);
+		if (!(workerId >= 0L && workerId < WORKER_ID_MAX_VALUE)) {
+			reporter.incr("exceptions");
+			throw new IllegalArgumentException();
+		}
 		int tries = 0;
 		while (true) {
 			try {
@@ -147,7 +155,7 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 				zkClient.create().withMode(CreateMode.EPHEMERAL)
 				        .forPath(path,
 				                 (getHostname() + ":" + snowflakeConfig.getPort()).getBytes());
-				SnowflakeIDGenerator.setWorkerId(workerId);
+				snowflakeIDGenerator.setWorkerId(workerId);
 				this.workerId = workerId;
 				waitRegWorkerIds.add(workerId);
 				return;
@@ -155,6 +163,7 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 				LOGGER.error("registerWorkerId", e);
 				if (e instanceof KeeperException.NodeExistsException) {
 					if (tries > 2) {
+						reporter.incr("exceptions");
 						throw e;
 					}
 				} else {
@@ -188,12 +197,14 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 						if (reportedWorkerId != id) {
 							LOGGER.error("Worker at {}:{} has id {} in zookeeper, but via rpc it says {}", peer.getHost(), peer.port, id,
 							             reportedWorkerId);
+							reporter.incr("exceptions");
 							throw new IllegalStateException("Worker id insanity.");
 						}
 						peerCount[0]++;
 						return stopwatch.stop().elapsed(TimeUnit.MILLISECONDS);
 					} catch (Exception e) {
 						LOGGER.error("", e);
+						reporter.incr("exceptions");
 						throw new IllegalStateException(e);
 					}
 				}).collect(Collectors.toList());
@@ -202,6 +213,7 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 			if (Math.abs(avg) > 10000) {
 				LOGGER.error("Timestamp sanity check failed. Mean timestamp is {}, " +
 				             "More than 10s away from the mean", avg);
+				reporter.incr("exceptions");
 				throw new IllegalStateException("timestamp sanity check failed");
 			}
 
@@ -256,6 +268,7 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 					break;
 				} else {
 					if (tries++ > 2) {
+						reporter.incr("exceptions");
 						LOGGER.error("", e);
 						break;
 					}
@@ -327,6 +340,7 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 					Thread.currentThread().interrupt();
 				} else {
 					if (tries++ > 2) {
+						reporter.incr("exceptions");
 						LOGGER.error("", e);
 						break;
 					}

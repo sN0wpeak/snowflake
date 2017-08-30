@@ -7,6 +7,7 @@ package io.shuidi.snowflake.server.enums;
 public enum ErrorCode {
 	NOT_LEADER(-2, "当前无分配权限"),
 	NOT_MORE_WORKER_ID(-3, "没有足够的workerId"),
+	NOT_AUTH_ERROR(-1, "鉴权失败"),
 	;
 
 	private int code;

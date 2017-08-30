@@ -17,10 +17,11 @@
 
 package io.shuidi.snowflake.core.service.impl;
 
-import com.google.common.base.Preconditions;
+import io.shuidi.snowflake.core.report.Reporter;
 import io.shuidi.snowflake.core.service.IDGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.text.SimpleDateFormat;
@@ -80,13 +81,19 @@ public final class SnowflakeIDGenerator implements IDGenerator {
 
 	private long lastTime;
 
+	@Autowired
+	Reporter reporter;
+
 	/**
 	 * 设置工作进程Id.
 	 *
 	 * @param workerId 工作进程Id
 	 */
-	public static void setWorkerId(final long workerId) {
-		Preconditions.checkArgument(workerId >= 0L && workerId < WORKER_ID_MAX_VALUE);
+	public void setWorkerId(final long workerId) {
+		if ((workerId >= 0L && workerId < WORKER_ID_MAX_VALUE)) {
+			reporter.incr("exceptions");
+			throw new IllegalArgumentException();
+		}
 		SnowflakeIDGenerator.workerId = 1;
 	}
 
@@ -98,9 +105,13 @@ public final class SnowflakeIDGenerator implements IDGenerator {
 	@Override
 	public synchronized long generateId() {
 		long currentMillis = System.currentTimeMillis();
-		Preconditions.checkState(lastTime <= currentMillis,
-		                         "Clock is moving backwards, last time is %d milliseconds, current time is %d milliseconds", lastTime,
-		                         currentMillis);
+
+		if (!(lastTime <= currentMillis)) {
+			reporter.incr("exceptions");
+			throw new IllegalStateException(
+					String.format("Clock is moving backwards, last time is %d milliseconds, current time is %d milliseconds", lastTime,
+					              currentMillis));
+		}
 		if (lastTime == currentMillis) {
 			if (0L == (sequence = ++sequence & SEQUENCE_MASK)) {
 				currentMillis = waitUntilNextTime(currentMillis);
@@ -123,9 +134,5 @@ public final class SnowflakeIDGenerator implements IDGenerator {
 		return time;
 	}
 
-	public static void main(String[] args) {
-		SnowflakeIDGenerator snowflakeIDGenerator = new SnowflakeIDGenerator();
-		LOGGER.info(snowflakeIDGenerator.generateId() + "");
-	}
 
 }
