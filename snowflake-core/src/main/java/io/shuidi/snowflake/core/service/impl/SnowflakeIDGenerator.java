@@ -17,12 +17,10 @@
 
 package io.shuidi.snowflake.core.service.impl;
 
-import io.shuidi.snowflake.core.report.Reporter;
+import io.shuidi.snowflake.core.report.ReporterHolder;
 import io.shuidi.snowflake.core.service.IDGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
@@ -46,7 +44,6 @@ import java.util.Date;
  * 可以调用@{@code DefaultKeyGenerator.setWorkerId}进行设置
  * </p>
  */
-@Service
 public final class SnowflakeIDGenerator implements IDGenerator {
 
 	private static Logger LOGGER = LoggerFactory.getLogger(SnowflakeIDGenerator.class);
@@ -81,17 +78,15 @@ public final class SnowflakeIDGenerator implements IDGenerator {
 
 	private long lastTime;
 
-	@Autowired
-	Reporter reporter;
 
 	/**
 	 * 设置工作进程Id.
 	 *
 	 * @param workerId 工作进程Id
 	 */
-	public void setWorkerId(final long workerId) {
+	public static void setWorkerId(final long workerId) {
 		if (!(workerId >= 0L && workerId < WORKER_ID_MAX_VALUE)) {
-			reporter.incr("exceptions");
+			ReporterHolder.exceptionCounter.inc();
 			throw new IllegalArgumentException();
 		}
 		SnowflakeIDGenerator.workerId = 1;
@@ -107,7 +102,7 @@ public final class SnowflakeIDGenerator implements IDGenerator {
 		long currentMillis = System.currentTimeMillis();
 
 		if (!(lastTime <= currentMillis)) {
-			reporter.incr("exceptions");
+			ReporterHolder.exceptionCounter.inc();
 			throw new IllegalStateException(
 					String.format("Clock is moving backwards, last time is %d milliseconds, current time is %d milliseconds", lastTime,
 					              currentMillis));

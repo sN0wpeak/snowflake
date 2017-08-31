@@ -13,8 +13,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class SnowflakeService {
 
-	@Autowired
-	SnowflakeIDGenerator snowflakeIDGenerator;
+	SnowflakeIDGenerator snowflakeIDGenerator = new SnowflakeIDGenerator();
 
 	@Autowired
 	SnowflakeServer snowflakeServer;

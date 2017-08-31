@@ -140,14 +140,10 @@ public class SnowflakeServerMultTest {
 		}
 		countDownLatch.await();
 
-		for (int i = 0; i < serverSize; i++) {
-			int port = (8800 + i);
-			System.out.println(snowflakeClient.getReport("localhost:" + port));
-		}
-
-
-
-
+//		for (int i = 0; i < serverSize; i++) {
+//			int port = (8800 + i);
+//			System.out.println(snowflakeClient.getReport("localhost:" + port));
+//		}
 
 		for (Process process : processes) {
 			process.destroy();

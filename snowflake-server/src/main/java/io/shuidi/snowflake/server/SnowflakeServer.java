@@ -1,12 +1,15 @@
 package io.shuidi.snowflake.server;
 
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.MetricRegistry;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Sets;
 import io.shuidi.snowflake.client.SnowflakeClient;
-import io.shuidi.snowflake.core.report.Reporter;
+import io.shuidi.snowflake.core.report.ReporterHolder;
 import io.shuidi.snowflake.core.service.impl.SnowflakeIDGenerator;
+import io.shuidi.snowflake.core.util.RetryRunner;
 import io.shuidi.snowflake.server.config.SnowflakeConfig;
 import io.shuidi.snowflake.server.enums.ErrorCode;
 import org.apache.curator.framework.CuratorFramework;
@@ -33,6 +36,7 @@ import java.net.UnknownHostException;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -53,10 +57,8 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 
 	@Autowired
 	SnowflakeConfig snowflakeConfig;
-	@Autowired
-	Reporter reporter;
-	@Autowired
-	SnowflakeIDGenerator snowflakeIDGenerator;
+
+	SnowflakeIDGenerator snowflakeIDGenerator = new SnowflakeIDGenerator();
 
 	public void setSnowflakeConfig(SnowflakeConfig snowflakeConfig) {
 		this.snowflakeConfig = snowflakeConfig;
@@ -72,7 +74,6 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 	private LeaderSelector leaderSelector;
 	private volatile boolean isLeader = false;
 	public static final Set<Integer> ALL_WORKER_IDS = ImmutableSortedSet.copyOf(Stream.iterate(0, a -> ++a).limit(1024).iterator());
-
 	private volatile int workerId = -1;
 
 	public void start() throws Exception {
@@ -83,30 +84,26 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 			Thread.sleep(1000);
 		}
 		initWorkerId();
+
+		ReporterHolder.metrics.register(MetricRegistry.name("SnowflakeServer", "workerId"), new Gauge<Integer>() {
+			@Override
+			public Integer getValue() {
+				return workerId;
+			}
+		});
 	}
 
+
 	private void initWorkerId() throws Exception {
-		int tries = 0;
-		while (true) {
-			try {
-				int workerId = genWorkid();
-				registerWorkerId(workerId);
-				return;
-			} catch (Exception e) {
-				LOGGER.error("initWorkerId", e);
-				if (e instanceof KeeperException.NodeExistsException) {
-					if (tries > 2) {
-						reporter.incr("exceptions");
-						throw e;
-					} else {
-						tries++;
-						Thread.sleep(1000);
-					}
-				} else {
-					throw e;
-				}
-			}
-		}
+		RetryRunner.create()
+		           .addTryExceptions(KeeperException.NodeExistsException.class)
+		           .onError(e -> ReporterHolder.exceptionCounter.inc())
+		           .thenThrow()
+		           .run(() -> {
+			           int workerId = genWorkid();
+			           registerWorkerId(workerId);
+			           return null;
+		           });
 	}
 
 	private int genWorkid() throws Exception {
@@ -140,82 +137,62 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 		return ErrorCode.NOT_MORE_WORKER_ID.getCode();
 	}
 
-	public String getLeaderUrl() throws Exception {
-		int tries = 0;
-		while (true) {
-			try {
-				if (hasLeader()) {
-					String leaderId = leaderSelector.getLeader().getId();
-					Optional<Peer> optional = peers().values().stream().filter(peer -> peer.getHost().equals(leaderId)).findFirst();
-					if (optional.isPresent()) {
-						return optional.get().getHostUrl();
-					}
-				}
-
-				Thread.sleep(1000);
-			} catch (Exception e) {
-				if (tries > 2) {
-					LOGGER.error("getLeaderUrl", e);
-					reporter.incr("exceptions");
-					throw e;
-				} else {
-					tries++;
-					Thread.sleep(1000);
-				}
-			}
-
-		}
-
+	public String getLeaderUrl() {
+		return RetryRunner.create()
+		                  .addTryExceptions(KeeperException.NodeExistsException.class)
+		                  .onError(e -> {
+			                  LOGGER.error("getLeaderUrl", e);
+			                  ReporterHolder.exceptionCounter.inc();
+		                  })
+		                  .limit(10)
+		                  .thenThrow()
+		                  .run(() -> {
+			                  String leaderId = leaderSelector.getLeader().getId();
+			                  Optional<Peer> optional =
+					                  peers().values().stream().filter(peer -> peer.getHost().equals(leaderId)).findFirst();
+			                  return optional.isPresent() ? optional.get().getHostUrl() : null;
+		                  });
 	}
 
 
 	public void registerWorkerId(int workerId) throws Exception {
 		if (!(workerId >= 0L && workerId < WORKER_ID_MAX_VALUE)) {
-			reporter.incr("exceptions");
+			ReporterHolder.exceptionCounter.inc();
 			throw new IllegalArgumentException();
 		}
-		int tries = 0;
-		while (true) {
-			try {
-				String path = String.format("%s/%s", snowflakeConfig.getWorkerIdZkPath(), workerId + "");
-				LOGGER.info("registerWorkerId: {} path:{}", workerId, path);
-				zkClient.create().withMode(CreateMode.EPHEMERAL)
-				        .forPath(path,
-				                 (getHostname() + ":" + snowflakeConfig.getPort()).getBytes());
-				snowflakeIDGenerator.setWorkerId(workerId);
-				this.workerId = workerId;
-				waitRegWorkerIds.add(workerId);
-				return;
-			} catch (Exception e) {
-				LOGGER.error("registerWorkerId", e);
-				if (e instanceof KeeperException.NodeExistsException) {
-					if (tries > 2) {
-						reporter.incr("exceptions");
-						throw e;
-					} else {
-						tries++;
-						Thread.sleep(1000);
-					}
-				} else {
-					throw e;
-				}
-			}
-		}
+
+		RetryRunner.create()
+		           .addTryExceptions(KeeperException.NodeExistsException.class)
+		           .onError(e -> {
+			           ReporterHolder.exceptionCounter.inc();
+			           LOGGER.error("registerWorkerId", e);
+		           })
+		           .thenThrow()
+		           .run((Callable<Void>) () -> {
+			           String path = String.format("%s/%s", snowflakeConfig.getWorkerIdZkPath(), workerId + "");
+			           LOGGER.info("registerWorkerId: {} path:{}", workerId, path);
+			           zkClient.create().withMode(CreateMode.EPHEMERAL)
+			                   .forPath(path,
+			                            (getHostname() + ":" + snowflakeConfig.getPort()).getBytes());
+			           snowflakeIDGenerator.setWorkerId(workerId);
+			           this.workerId = workerId;
+			           waitRegWorkerIds.add(workerId);
+			           return null;
+		           });
 	}
 
 	public static String getHostname() throws UnknownHostException {return InetAddress.getLocalHost().getHostAddress();}
 
 	public void sanityCheckPeers() throws Exception {
 		final int[] peerCount = {0};
-		ImmutableMap<Integer, Peer> peerImmutableMap = peers();
-
-		List<Long> timestamps = peerImmutableMap.entrySet()
-		                                        .stream()
-		                                        .filter(peer ->
-				                                                !peer.getValue().getHost()
-				                                                     .equals(snowflakeConfig.getServer()) &&
-				                                                peer.getValue().getPort() != snowflakeConfig.getPort()
-		                                        ).map(integerPeerEntry -> {
+		ImmutableMap<Integer, Peer> peers = peers();
+		List<Long> timestamps = peers.entrySet()
+		                             .stream()
+		                             .filter(peer ->
+				                                     !peer.getValue().getHost()
+				                                          .equals(snowflakeConfig.getServer()) &&
+				                                     peer.getValue().getPort() != snowflakeConfig.getPort()
+		                             ).map(integerPeerEntry -> {
 					try {
 						Stopwatch stopwatch = Stopwatch.createStarted();
 						int id = integerPeerEntry.getKey();
@@ -226,14 +203,14 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 						if (reportedWorkerId != id) {
 							LOGGER.error("Worker at {}:{} has id {} in zookeeper, but via rpc it says {}", peer.getHost(), peer.port, id,
 							             reportedWorkerId);
-							reporter.incr("exceptions");
+							ReporterHolder.exceptionCounter.inc();
 							throw new IllegalStateException("Worker id insanity.");
 						}
 						peerCount[0]++;
 						return stopwatch.stop().elapsed(TimeUnit.MILLISECONDS);
 					} catch (Exception e) {
 						LOGGER.error("", e);
-						reporter.incr("exceptions");
+						ReporterHolder.exceptionCounter.inc();
 						throw new IllegalStateException(e);
 					}
 				}).collect(Collectors.toList());
@@ -242,12 +219,10 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 			if (Math.abs(avg) > 10000) {
 				LOGGER.error("Timestamp sanity check failed. Mean timestamp is {}, " +
 				             "More than 10s away from the mean", avg);
-				reporter.incr("exceptions");
+				ReporterHolder.exceptionCounter.inc();
 				throw new IllegalStateException("timestamp sanity check failed");
 			}
-
 		}
-
 	}
 
 	public ImmutableMap<Integer, Peer> peers() throws Exception {
@@ -272,7 +247,7 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 			peerBuilder.put(Integer.valueOf(child), new Peer(list[0], Integer.valueOf(list[1])));
 		}
 		ImmutableMap<Integer, Peer> peerImmutableMap = peerBuilder.build();
-		LOGGER.info("found {} children", peerImmutableMap.size());
+//		LOGGER.info("found {} children", peerImmutableMap.size());
 		return peerImmutableMap;
 	}
 
@@ -297,9 +272,11 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 					break;
 				} else {
 					if (tries++ > 2) {
-						reporter.incr("exceptions");
+						ReporterHolder.exceptionCounter.inc();
 						LOGGER.error("", e);
 						break;
+					} else {
+						Thread.sleep(1000);
 					}
 				}
 			}
@@ -369,7 +346,7 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 					Thread.currentThread().interrupt();
 				} else {
 					if (tries++ > 2) {
-						reporter.incr("exceptions");
+						ReporterHolder.exceptionCounter.inc();
 						LOGGER.error("", e);
 						break;
 					}

@@ -96,7 +96,11 @@ public class RetryRunner {
 				if (emitError) {
 					LOGGER.warn(String.format("retried %d times... ", retryLimit), e);
 					if (retryErrorCallable != null) {
-						retryErrorCallable.onError(e);
+						try {
+							retryErrorCallable.onError(e);
+						} catch (Exception e1) {
+							LOGGER.warn("call retryErrorCallable error...", e);
+						}
 					}
 					if (throwException) {
 						throw new RuntimeException(e);
