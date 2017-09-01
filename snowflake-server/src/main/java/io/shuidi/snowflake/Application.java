@@ -1,5 +1,6 @@
 package io.shuidi.snowflake;
 
+import io.shuidi.snowflake.core.service.impl.SnowflakeIDGenerator;
 import io.shuidi.snowflake.server.SnowflakeServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +23,10 @@ public class Application {
 		final ConfigurableApplicationContext applicationContext = SpringApplication.run(Application.class, args);
 		SnowflakeServer snowflakeServer = applicationContext.getBean(SnowflakeServer.class);
 		snowflakeServer.start();
+		if (snowflakeServer.getWorkerId() > 0) {
+			SnowflakeIDGenerator.setWorkerId(snowflakeServer.getWorkerId());
+		}
+
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 			try {
 				snowflakeServer.close();

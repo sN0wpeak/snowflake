@@ -16,6 +16,7 @@ import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.leader.CancelLeadershipException;
 import org.apache.curator.framework.recipes.leader.LeaderSelector;
 import org.apache.curator.framework.recipes.leader.LeaderSelectorListener;
+import org.apache.curator.framework.recipes.locks.InterProcessMutex;
 import org.apache.curator.framework.state.ConnectionState;
 import org.apache.curator.utils.CloseableUtils;
 import org.apache.zookeeper.CreateMode;
@@ -56,9 +57,8 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 	private static final byte[] NONE = new byte[]{};
 
 	@Autowired
-	SnowflakeConfig snowflakeConfig;
+	private SnowflakeConfig snowflakeConfig;
 
-	SnowflakeIDGenerator snowflakeIDGenerator = new SnowflakeIDGenerator();
 
 	public void setSnowflakeConfig(SnowflakeConfig snowflakeConfig) {
 		this.snowflakeConfig = snowflakeConfig;
@@ -76,6 +76,8 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 	public static final Set<Integer> ALL_WORKER_IDS = ImmutableSortedSet.copyOf(Stream.iterate(0, a -> ++a).limit(1024).iterator());
 	private volatile int workerId = -1;
 
+
+
 	public void start() throws Exception {
 		LOGGER.info("start SnowflakeServer... ip: {}", getHostname());
 		zkClient.start();
@@ -92,6 +94,8 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 			}
 		});
 	}
+
+
 
 
 	private void initWorkerId() throws Exception {
@@ -174,11 +178,11 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 			           zkClient.create().withMode(CreateMode.EPHEMERAL)
 			                   .forPath(path,
 			                            (getHostname() + ":" + snowflakeConfig.getPort()).getBytes());
-			           snowflakeIDGenerator.setWorkerId(workerId);
 			           this.workerId = workerId;
 			           waitRegWorkerIds.add(workerId);
 			           return null;
 		           });
+
 	}
 
 	public static String getHostname() throws UnknownHostException {return InetAddress.getLocalHost().getHostAddress();}

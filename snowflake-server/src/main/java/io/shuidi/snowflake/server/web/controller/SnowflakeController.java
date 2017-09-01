@@ -50,6 +50,26 @@ public class SnowflakeController {
 		return resultModel;
 	}
 
+	@RequestMapping(path = "/get-id32", method = {RequestMethod.GET}, produces = {"application/json;charset=UTF-8"})
+	@ResponseBody
+	public ResultModel getId32(@RequestParam("useragent") String useragent) {
+		if (!validUseragent(useragent)) {
+			ResultModel resultModel = new ResultModel();
+			resultModel.setCode(ErrorCode.NOT_AUTH_ERROR.getCode());
+			resultModel.setMsg(ErrorCode.NOT_AUTH_ERROR.getDesc());
+			ReporterHolder.metrics.counter("validUseragentExceptions").inc();
+			return resultModel;
+		}
+
+		ResultModel resultModel = ResultResolver
+				.sendNormalResult(ImmutableMap.of("id", snowflakeService.generateId32()));
+
+		ReporterHolder.metrics.counter("ids_generated").inc();
+		ReporterHolder.metrics.counter("ids_generated_" + useragent).inc();
+
+		return resultModel;
+	}
+
 	public boolean validUseragent(String useragent) {
 		if (StringUtils.isEmpty(useragent)) {
 			return false;
