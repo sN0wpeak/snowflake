@@ -8,7 +8,6 @@ import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Sets;
 import io.shuidi.snowflake.client.SnowflakeClient;
 import io.shuidi.snowflake.core.report.ReporterHolder;
-import io.shuidi.snowflake.core.service.impl.SnowflakeIDGenerator;
 import io.shuidi.snowflake.core.util.RetryRunner;
 import io.shuidi.snowflake.server.config.SnowflakeConfig;
 import io.shuidi.snowflake.server.enums.ErrorCode;
@@ -16,7 +15,6 @@ import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.leader.CancelLeadershipException;
 import org.apache.curator.framework.recipes.leader.LeaderSelector;
 import org.apache.curator.framework.recipes.leader.LeaderSelectorListener;
-import org.apache.curator.framework.recipes.locks.InterProcessMutex;
 import org.apache.curator.framework.state.ConnectionState;
 import org.apache.curator.utils.CloseableUtils;
 import org.apache.zookeeper.CreateMode;
@@ -76,8 +74,6 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 	public static final Set<Integer> ALL_WORKER_IDS = ImmutableSortedSet.copyOf(Stream.iterate(0, a -> ++a).limit(1024).iterator());
 	private volatile int workerId = -1;
 
-
-
 	public void start() throws Exception {
 		LOGGER.info("start SnowflakeServer... ip: {}", getHostname());
 		zkClient.start();
@@ -85,6 +81,7 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 		while (!hasLeader()) {
 			Thread.sleep(1000);
 		}
+
 		initWorkerId();
 
 		ReporterHolder.metrics.register(MetricRegistry.name("SnowflakeServer", "workerId"), new Gauge<Integer>() {
@@ -96,12 +93,10 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 	}
 
 
-
-
 	private void initWorkerId() throws Exception {
 		RetryRunner.create()
 		           .addTryExceptions(KeeperException.NodeExistsException.class)
-		           .onError(e -> ReporterHolder.exceptionCounter.inc())
+		           .onError(e -> ReporterHolder.incException(e))
 		           .thenThrow()
 		           .run(() -> {
 			           int workerId = genWorkid();
@@ -146,7 +141,7 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 		                  .addTryExceptions(KeeperException.NodeExistsException.class)
 		                  .onError(e -> {
 			                  LOGGER.error("getLeaderUrl", e);
-			                  ReporterHolder.exceptionCounter.inc();
+			                  ReporterHolder.incException(e);
 		                  })
 		                  .limit(10)
 		                  .thenThrow()
@@ -161,14 +156,15 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 
 	public void registerWorkerId(int workerId) throws Exception {
 		if (!(workerId >= 0L && workerId < WORKER_ID_MAX_VALUE)) {
-			ReporterHolder.exceptionCounter.inc();
-			throw new IllegalArgumentException();
+			Exception e = new IllegalArgumentException();
+			ReporterHolder.incException(e);
+			throw e;
 		}
 
 		RetryRunner.create()
 		           .addTryExceptions(KeeperException.NodeExistsException.class)
 		           .onError(e -> {
-			           ReporterHolder.exceptionCounter.inc();
+			           ReporterHolder.incException(e);
 			           LOGGER.error("registerWorkerId", e);
 		           })
 		           .thenThrow()
@@ -207,14 +203,14 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 						if (reportedWorkerId != id) {
 							LOGGER.error("Worker at {}:{} has id {} in zookeeper, but via rpc it says {}", peer.getHost(), peer.port, id,
 							             reportedWorkerId);
-							ReporterHolder.exceptionCounter.inc();
+							ReporterHolder.incException(IllegalStateException.class);
 							throw new IllegalStateException("Worker id insanity.");
 						}
 						peerCount[0]++;
 						return stopwatch.stop().elapsed(TimeUnit.MILLISECONDS);
 					} catch (Exception e) {
 						LOGGER.error("", e);
-						ReporterHolder.exceptionCounter.inc();
+						ReporterHolder.incException(e);
 						throw new IllegalStateException(e);
 					}
 				}).collect(Collectors.toList());
@@ -223,7 +219,7 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 			if (Math.abs(avg) > 10000) {
 				LOGGER.error("Timestamp sanity check failed. Mean timestamp is {}, " +
 				             "More than 10s away from the mean", avg);
-				ReporterHolder.exceptionCounter.inc();
+				ReporterHolder.incException(IllegalStateException.class);
 				throw new IllegalStateException("timestamp sanity check failed");
 			}
 		}
@@ -276,7 +272,7 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 					break;
 				} else {
 					if (tries++ > 2) {
-						ReporterHolder.exceptionCounter.inc();
+						ReporterHolder.incException(e);
 						LOGGER.error("", e);
 						break;
 					} else {
@@ -350,7 +346,7 @@ public class SnowflakeServer implements LeaderSelectorListener, InitializingBean
 					Thread.currentThread().interrupt();
 				} else {
 					if (tries++ > 2) {
-						ReporterHolder.exceptionCounter.inc();
+						ReporterHolder.incException(e);
 						LOGGER.error("", e);
 						break;
 					}

@@ -37,7 +37,7 @@ public class SnowflakeController {
 			ResultModel resultModel = new ResultModel();
 			resultModel.setCode(ErrorCode.NOT_AUTH_ERROR.getCode());
 			resultModel.setMsg(ErrorCode.NOT_AUTH_ERROR.getDesc());
-			ReporterHolder.metrics.counter("validUseragentExceptions").inc();
+			ReporterHolder.incException(IllegalAccessError.class);
 			return resultModel;
 		}
 
@@ -57,7 +57,7 @@ public class SnowflakeController {
 			ResultModel resultModel = new ResultModel();
 			resultModel.setCode(ErrorCode.NOT_AUTH_ERROR.getCode());
 			resultModel.setMsg(ErrorCode.NOT_AUTH_ERROR.getDesc());
-			ReporterHolder.metrics.counter("validUseragentExceptions").inc();
+			ReporterHolder.incException(IllegalAccessError.class);
 			return resultModel;
 		}
 

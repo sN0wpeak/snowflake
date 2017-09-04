@@ -71,6 +71,25 @@ public class SnowflakeClient {
 		});
 	}
 
+	public int getId32(String serverHost, String query) {
+		Preconditions.checkNotNull(serverHost);
+		return RetryRunner.create().addTryExceptions(IOException.class).thenThrow().run(() -> {
+			String path = "/api/snowflake/get-id32";
+			if (!StringUtils.isEmpty(query)) {
+				path += "?" + query;
+			}
+			String url = "http://" + serverHost + "/" + path;
+			JSONObject result =
+					HttpClientUtil.execute(new HttpGet(url), new HttpResponseCallbackHandlerJsonHandler<>(JSONObject.class));
+			if (result.getInteger("code") == 0) {
+				return result.getJSONObject("data").getInteger("id");
+			} else {
+				LOGGER.error("call getId error {}", result.toJSONString());
+				throw new IllegalStateException(result.getString("msg"));
+			}
+		});
+	}
+
 	public String getReport(String serverHost) {
 		Preconditions.checkNotNull(serverHost);
 		return RetryRunner.create().addTryExceptions(IOException.class).thenThrow().run(() -> {

@@ -18,4 +18,14 @@ public final class ReporterHolder {
 		reporter.start();
 	}
 
+	public static final void incException(Exception e) {
+		exceptionCounter.inc();
+		metrics.counter("exceptions." + e.getClass().getName()).inc();
+	}
+
+	public static final void incException(Class e) {
+		exceptionCounter.inc();
+		metrics.counter("exceptions." + e.getName()).inc();
+	}
+
 }

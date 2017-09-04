@@ -98,7 +98,7 @@ public final class SnowflakeIDGenerator implements IDGenerator {
 	 * @return 返回@{@link Long}类型的Id
 	 */
 	@Override
-	public synchronized long generateId() {
+	public synchronized Long generateId() {
 		long currentMillis = System.currentTimeMillis();
 
 		if (!(lastTime <= currentMillis)) {
