@@ -22,7 +22,11 @@ public class ZKInt32IdGenerator implements IDGenerator<Integer> {
 		this.client = client;
 		RangeStore rangeStore = new ZkRangeStore(name, client, lockPath, storePath, 1, TimeUnit.SECONDS, start, rangeCount);
 		if (start < 0) {
-			start = rangeStore.getNextRange();
+			try {
+				start = rangeStore.getNextRange();
+			} catch (InterruptedException e) {
+				throw new IllegalStateException("ZKInt32IdGenerator 初始值获取失败!!!");
+			}
 		}
 		rangeSequence = new RangeSequence(1, start, rangeCount, rangeStore);
 		rangeSequence.start();

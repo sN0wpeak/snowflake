@@ -1,8 +1,8 @@
 package io.shuidi.snowflake.server;
 
 import io.shuidi.snowflake.client.SnowflakeClient;
-import io.shuidi.snowflake.server.config.SnowflakeConfig;
-import io.shuidi.snowflake.server.config.ZkConfig;
+import io.shuidi.snowflake.core.config.SnowflakeConfig;
+import io.shuidi.snowflake.core.util.zk.CuratorFrameworkUtils;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.utils.CloseableUtils;
 import org.junit.Test;
@@ -27,7 +27,7 @@ public class SnowflakeServerMultTest {
 
 	@Test
 	public void testLeaderSelect() throws Exception {
-		ZkConfig zkConfig = new ZkConfig();
+		CuratorFrameworkUtils zkConfig = new CuratorFrameworkUtils();
 		zkConfig.setConnectionString("127.0.0.1:2181");
 		zkConfig.setConnectionTimeoutMs(1000);
 		zkConfig.setSessionTimeoutMs(10000);
@@ -47,13 +47,11 @@ public class SnowflakeServerMultTest {
 			SnowflakeConfig sfc = new SnowflakeConfig();
 			BeanUtils.copyProperties(snowflakeConfig, sfc);
 			sfc.setPort(i + 8800);
-			CuratorFramework zkClient = zkConfig.zkClient();
+			CuratorFramework zkClient = zkConfig.create();
 			zkClients.add(zkClient);
 
 			SnowflakeServer snowflakeServer = new SnowflakeServer();
 			snowflakeServer.setZkClient(zkClient);
-			snowflakeServer.setSnowflakeConfig(sfc);
-			snowflakeServer.afterPropertiesSet();
 
 			executorService.execute(() -> {
 				try {

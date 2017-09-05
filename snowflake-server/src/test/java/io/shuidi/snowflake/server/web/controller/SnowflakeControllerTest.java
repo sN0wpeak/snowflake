@@ -116,14 +116,6 @@ public class SnowflakeControllerTest {
 	}
 
 
-	public static class InTest {
-
-		@Test
-		public void testValidateUa() {
-			System.out.println(new SnowflakeController().validUseragent("AA1"));
-			;
-		}
-	}
 
 
 }

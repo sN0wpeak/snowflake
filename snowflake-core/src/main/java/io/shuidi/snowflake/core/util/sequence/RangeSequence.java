@@ -1,6 +1,9 @@
 package io.shuidi.snowflake.core.util.sequence;
 
 import com.google.common.base.Preconditions;
+import io.shuidi.snowflake.core.error.ServiceErrorException;
+import io.shuidi.snowflake.core.error.enums.ErrorCode;
+import io.shuidi.snowflake.core.report.ReporterHolder;
 import io.shuidi.snowflake.core.util.UnsafeUtils;
 import io.shuidi.snowflake.core.util.threadpool.ThreadPools;
 import org.slf4j.Logger;
@@ -8,8 +11,7 @@ import org.slf4j.LoggerFactory;
 import sun.misc.Unsafe;
 
 import java.util.concurrent.Exchanger;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Author: Alvin Tian
@@ -29,7 +31,10 @@ public class RangeSequence {
 	private transient volatile long valueWhenInterrupted = -1;
 
 	private Exchanger<Long> exchanger = new Exchanger<>();
-
+	private final AtomicInteger ctl = new AtomicInteger(INITIAL);
+	private static final int INITIAL = 1;
+	private static final int RUNNING = 1 << INITIAL;
+	private static final int STOP = 1 << RUNNING;
 
 	public RangeSequence(long increment, long start, long rangeCount, RangeStore rangeStore) {
 		Preconditions.checkNotNull(rangeStore);
@@ -42,10 +47,10 @@ public class RangeSequence {
 		this.sequence = new Sequence(start, increment);
 		this.sizeCtl = start + rangeCount;
 	}
-//	static final int resizeStamp(int n) {
+
+	//	static final int resizeStamp(int n) {
 //		return Integer.numberOfLeadingZeros(n) | (1 << (RESIZE_STAMP_BITS - 1));
 //	}
-
 
 	public long incrementAndGet() {
 //		long v = sequence.get();
@@ -75,26 +80,18 @@ public class RangeSequence {
 //		}
 //		v = sequence.incrementAndGet();
 //		return v;
+
+		if (ctl.get() == STOP) {
+			throw new ServiceErrorException(ErrorCode.SYSTEM_STOP);
+		}
+
 		// TODO: 2017/9/4 待优化
+
 		synchronized (this) {
 			long v = sequence.incrementAndGet();
 			long sc;
 			if ((v > (sc = sizeCtl)) && v <= Long.MAX_VALUE) {
-				try {
-					v = exchanger.exchange(v, 100, TimeUnit.MILLISECONDS);
-				} catch (InterruptedException | TimeoutException e) {
-					int tries = 0;
-					while (valueWhenInterrupted < 0) {
-						if (++tries % 1000 == 0) {
-							try {
-								Thread.sleep(100);
-							} catch (InterruptedException ig) {
-							}
-						}
-					}
-					LOGGER.info("valueWhenInterrupted {}", valueWhenInterrupted);
-					v = valueWhenInterrupted;
-				}
+				v = getNextValue(v);
 				sizeCtl = v + rangeCount;
 				v = v + 1;
 				sequence.set(v);
@@ -102,6 +99,21 @@ public class RangeSequence {
 			return v;
 		}
 
+	}
+
+	public long getNextValue(long v) {
+		while (true) {
+			try {
+				v = exchanger.exchange(v);
+				return v;
+			} catch (InterruptedException e) {
+				if (ctl.get() == STOP) {
+					throw new ServiceErrorException(ErrorCode.SYSTEM_STOP);
+				} else {
+					throw new ServiceErrorException(ErrorCode.SYSTEM_ERROR);
+				}
+			}
+		}
 	}
 
 	private final static Unsafe U = UnsafeUtils.getUnsafe();
@@ -117,29 +129,29 @@ public class RangeSequence {
 	}
 
 	public void stop() {
-		currThread.interrupt();
-		currThread = null;
+		if (ctl.compareAndSet(RUNNING, STOP)) {
+			LOGGER.info("RangeSequence will stop...");
+		}
 	}
 
-	private Thread currThread;
-
 	public void start() {
-		ThreadPools.sequenceExecutor.execute(() -> {
-			currThread = Thread.currentThread();
-			long v;
-			while (!Thread.currentThread().isInterrupted()) {
-				v = rangeStore.getNextRange();
-				if (v < 0) {
-					v = 0;
+		if (ctl.compareAndSet(INITIAL, RUNNING)) {
+			ReporterHolder.metrics.counter("RangeSeq." + rangeStore.getClass().getSimpleName()).inc();
+			ThreadPools.sequenceExecutor.execute(() -> {
+				while (ctl.get() != STOP || !Thread.currentThread().isInterrupted()) {
+					long v;
+					try {
+						v = rangeStore.getNextRange();
+						exchanger.exchange(v);
+					} catch (InterruptedException e) {
+						LOGGER.info("valueWhenInterrupted {}", valueWhenInterrupted);
+						Thread.currentThread().interrupt();
+					}
 				}
-				try {
-					exchanger.exchange(v);
-				} catch (InterruptedException e) {
-					valueWhenInterrupted = v;
-					LOGGER.info("valueWhenInterrupted {}", valueWhenInterrupted);
-					Thread.currentThread().interrupt();
-				}
-			}
-		});
+
+			});
+			ReporterHolder.metrics.counter("RangeSeq." + rangeStore.getClass().getSimpleName()).dec();
+			LOGGER.info("RangeSequence{} stop...", rangeStore.toString());
+		}
 	}
 }

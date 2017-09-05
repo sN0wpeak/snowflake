@@ -6,7 +6,7 @@ package io.shuidi.snowflake.core.util.sequence;
  */
 public interface RangeStore {
 
-	public long getNextRange();
+	public long getNextRange() throws InterruptedException;
 	public long getCurrRange();
 
 }

@@ -102,7 +102,6 @@ public final class SnowflakeIDGenerator implements IDGenerator {
 		long currentMillis = System.currentTimeMillis();
 
 		if (!(lastTime <= currentMillis)) {
-			ReporterHolder.exceptionCounter.inc();
 			throw new IllegalStateException(
 					String.format("Clock is moving backwards, last time is %d milliseconds, current time is %d milliseconds", lastTime,
 					              currentMillis));

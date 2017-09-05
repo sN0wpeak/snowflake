@@ -23,6 +23,12 @@ public final class ReporterHolder {
 		metrics.counter("exceptions." + e.getClass().getName()).inc();
 	}
 
+	public static final void incException(String e) {
+		exceptionCounter.inc();
+		metrics.counter("exceptions." + e).inc();
+	}
+
+
 	public static final void incException(Class e) {
 		exceptionCounter.inc();
 		metrics.counter("exceptions." + e.getName()).inc();

@@ -2,9 +2,6 @@ package io.shuidi.snowflake.core.util.sequence;
 
 import com.google.common.collect.Lists;
 import io.shuidi.snowflake.core.util.threadpool.ThreadPools;
-import io.shuidi.snowflake.core.util.zk.CuratorFrameworkUtils;
-import org.apache.curator.framework.CuratorFramework;
-import org.apache.curator.utils.ZKPaths;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -17,7 +14,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * Author: Alvin Tian
  * Date: 2017/9/4 11:25
  */
-public class RangeSequenceTest {
+public class RangeSequenceTest extends TestSeqBase {
 
 	@org.junit.Test
 	public void incrementAndGetMulitMem() throws Exception {
@@ -36,26 +33,11 @@ public class RangeSequenceTest {
 		int threads = 10;
 		int pros = 10;
 		int increment = 10;
-		ZkRangeStore zkRangeStore = getZkRangeStore();
+		ZkRangeStore zkRangeStore = getZkRangeStore(0);
 		testByStore(perSize, threads, pros, increment, zkRangeStore);
 //		Assert.assertEquals(s1, (s2) * (s2 + 1) / 2);
 	}
 
-	public ZkRangeStore getZkRangeStore() {
-		String lockPath = "/snowflake/locks";
-		String storePath = "/snowflake/idstore";
-		List<String> clients = org.assertj.core.util.Lists.newArrayList("A", "B", "C");
-		CuratorFramework curatorFramework = CuratorFrameworkUtils.create("127.0.0.1:2181", 1000, 10000);
-		curatorFramework.start();
-		for (String client : clients) {
-			try {
-				curatorFramework.setData().forPath(ZKPaths.makePath(storePath, client), "0".getBytes());
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-		}
-		return new ZkRangeStore(clients.get(0), curatorFramework, lockPath, storePath, 1, TimeUnit.SECONDS, 0, 10);
-	}
 
 	public void testByStore(int perSize, int threads, int pros, int increment, RangeStore memoryRangeStore)
 			throws InterruptedException, ExecutionException {
@@ -131,16 +113,38 @@ public class RangeSequenceTest {
 
 	@Test
 	public void incrementAndGetZk() throws Exception {
-		RangeStore memoryRangeStore = getZkRangeStore();
-		RangeSequence rangeSequence = new RangeSequence(1, memoryRangeStore.getNextRange(), 10, memoryRangeStore);
-		rangeSequence.start();
-		long size = 10000;
-		long s2 = 0;
-		for (int i = 0; i < size; i++) {
-			s2 += rangeSequence.incrementAndGet();
+//		RangeStore memoryRangeStore = getZkRangeStore();
+//		RangeSequence rangeSequence = new RangeSequence(1, memoryRangeStore.getNextRange(), 10, memoryRangeStore);
+//		rangeSequence.start();
+//		long size = 10000;
+//		long s2 = 0;
+//		for (int i = 0; i < size; i++) {
+//			s2 += rangeSequence.incrementAndGet();
+//		}
+//		long s1 = size * (size + 1) / 2;
+//		Assert.assertEquals(s2, s1);
+
+		for (int i = 0; i < clients.size(); i++) {
+			int finalI = i;
+			ThreadPools.sequenceExecutor.submit(new Runnable() {
+				@Override
+				public void run() {
+					try {
+						runRangeSeq(getZkRangeStore(finalI), 100, 100, 10);
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					} catch (BrokenBarrierException e) {
+						e.printStackTrace();
+					} catch (ExecutionException e) {
+						e.printStackTrace();
+					}
+				}
+			});
 		}
-		long s1 = size * (size + 1) / 2;
-		Assert.assertEquals(s2, s1);
+		Thread.sleep(1000);
+		ThreadPools.sequenceExecutor.shutdownNow();
+		ThreadPools.sequenceExecutor.awaitTermination(1, TimeUnit.HOURS);
+
 	}
 
 	@Test
@@ -161,6 +165,22 @@ public class RangeSequenceTest {
 		Thread.sleep(100);
 		thread.interrupt();
 		exchanger.exchange(1);
+	}
 
+	@Test
+	public void testInterr() throws Exception {
+		RangeStore rangeStore = getZkRangeStore(0);
+		RangeSequence rangeSequence = new RangeSequence(1, rangeStore.getNextRange(), 10, rangeStore);
+		rangeSequence.start();
+		Thread thread = new Thread(() -> {
+			for (int j = 0; j < 100; j++) {
+				System.out.println(rangeSequence.incrementAndGet());
+			}
+		});
+		thread.start();
+		Thread.sleep(10);
+		rangeSequence.stop();
+		thread.interrupt();
+		thread.join();
 	}
 }

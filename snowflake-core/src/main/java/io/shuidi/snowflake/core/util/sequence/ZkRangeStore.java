@@ -45,7 +45,7 @@ public class ZkRangeStore implements RangeStore {
 
 
 	@Override
-	public long getNextRange() {
+	public long getNextRange() throws InterruptedException {
 		try {
 			while (true) {
 				try {
@@ -54,7 +54,7 @@ public class ZkRangeStore implements RangeStore {
 					}
 				} catch (Exception e) {
 					if (e instanceof InterruptedException) {
-						Thread.currentThread().interrupt();
+						throw (InterruptedException) e;
 					} else {
 						ReporterHolder.incException(e);
 						LOGGER.error(clientName + "  lock.acquire error... ", e);
@@ -71,6 +71,8 @@ public class ZkRangeStore implements RangeStore {
 					client.setData()
 					      .forPath(storePath, String.valueOf(value + rangeSize).getBytes());
 					this.value = value;
+					LOGGER.info("" +
+					            "getNextRange Client: {}, Value: {}", clientName, value);
 					return value;
 				} catch (Exception e) {
 					if (e instanceof KeeperException.NoNodeException) {
@@ -79,10 +81,11 @@ public class ZkRangeStore implements RangeStore {
 							      .creatingParentsIfNeeded()
 							      .withMode(CreateMode.PERSISTENT).forPath(storePath, String.valueOf(initialValue).getBytes());
 						} catch (Exception e1) {
-							throw new RuntimeException(e1);
+							LOGGER.error("opt value " + clientName, e);
+							ReporterHolder.incException(e);
 						}
 					} else if (e instanceof InterruptedException) {
-						Thread.currentThread().interrupt();
+						throw (InterruptedException) e;
 					} else {
 						LOGGER.error("opt value " + clientName, e);
 						ReporterHolder.incException(e);
@@ -93,8 +96,13 @@ public class ZkRangeStore implements RangeStore {
 			try {
 				lock.release();
 			} catch (Exception e) {
-				LOGGER.warn("lock.release error " + clientName, e);
-				ReporterHolder.incException(e);
+				if (e instanceof InterruptedException) {
+					throw (InterruptedException) e;
+				} else if (e instanceof IllegalMonitorStateException) {
+				} else {
+					LOGGER.warn("lock.release error " + clientName, e);
+					ReporterHolder.incException(e);
+				}
 			}
 		}
 	}
@@ -102,5 +110,10 @@ public class ZkRangeStore implements RangeStore {
 	@Override
 	public long getCurrRange() {
 		return value;
+	}
+
+	@Override
+	public String toString() {
+		return clientName;
 	}
 }
