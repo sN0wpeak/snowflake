@@ -1,7 +1,5 @@
 package io.shuidi.snowflake.core.service;
 
-import org.hibernate.validator.constraints.NotEmpty;
-
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
 
@@ -9,12 +7,12 @@ import javax.validation.constraints.NotNull;
  * Author: Alvin Tian
  * Date: 2017/9/5 15:02
  */
-public class BizInfo {
+public class Partner {
 
 	@Min(0)
 	private Integer start;
-	private String appKey;
-	private String appSecret;
+	private String partnerKey;
+	private String partnerSecret;
 	@Min(1000)
 	private Integer rangeCount;
 
@@ -36,20 +34,20 @@ public class BizInfo {
 		this.start = start;
 	}
 
-	public String getAppKey() {
-		return appKey;
+	public String getPartnerKey() {
+		return partnerKey;
 	}
 
-	public void setAppKey(String appKey) {
-		this.appKey = appKey;
+	public void setPartnerKey(String partnerKey) {
+		this.partnerKey = partnerKey;
 	}
 
-	public String getAppSecret() {
-		return appSecret;
+	public String getPartnerSecret() {
+		return partnerSecret;
 	}
 
-	public void setAppSecret(String appSecret) {
-		this.appSecret = appSecret;
+	public void setPartnerSecret(String partnerSecret) {
+		this.partnerSecret = partnerSecret;
 	}
 
 	public boolean isUseAuth() {
@@ -64,8 +62,8 @@ public class BizInfo {
 	public String toString() {
 		return "BizInfo{" +
 		       "start=" + start +
-		       ", appKey='" + appKey + '\'' +
-		       ", appSecret='" + appSecret + '\'' +
+		       ", partnerKey='" + partnerKey + '\'' +
+		       ", partnerSecret='" + partnerSecret + '\'' +
 		       ", rangeCount=" + rangeCount +
 		       ", useAuth=" + useAuth +
 		       '}';

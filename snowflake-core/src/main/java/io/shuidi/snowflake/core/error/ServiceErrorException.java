@@ -11,7 +11,7 @@ public class ServiceErrorException extends RuntimeException {
 	private ErrorCode errorCode;
 
 	public ServiceErrorException(ErrorCode errorCode) {
-		super(errorCode.toString());
+		super(errorCode.getDesc());
 		this.errorCode = errorCode;
 	}
 

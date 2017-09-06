@@ -1,5 +1,6 @@
 package io.shuidi.snowflake.core.service.impl;
 
+import com.google.common.base.Preconditions;
 import io.shuidi.snowflake.core.service.IDGenerator;
 import io.shuidi.snowflake.core.util.sequence.RangeSequence;
 import io.shuidi.snowflake.core.util.sequence.RangeStore;
@@ -18,15 +19,18 @@ public class ZKInt32IdGenerator implements IDGenerator<Integer> {
 
 	private RangeSequence rangeSequence;
 
-	public ZKInt32IdGenerator(CuratorFramework client, String lockPath, String storePath, String name, long start, int rangeCount) {
+	public ZKInt32IdGenerator(CuratorFramework client, String lockPath, String sequencePath, String name, long start, int rangeCount) {
+		Preconditions.checkNotNull(client);
+		Preconditions.checkNotNull(lockPath);
+		Preconditions.checkNotNull(sequencePath);
+		Preconditions.checkNotNull(name);
 		this.client = client;
-		RangeStore rangeStore = new ZkRangeStore(name, client, lockPath, storePath, 1, TimeUnit.SECONDS, start, rangeCount);
-		if (start < 0) {
-			try {
-				start = rangeStore.getNextRange();
-			} catch (InterruptedException e) {
-				throw new IllegalStateException("ZKInt32IdGenerator 初始值获取失败!!!");
-			}
+		client.start();
+		RangeStore rangeStore = new ZkRangeStore(name, client, lockPath, sequencePath, 1, TimeUnit.SECONDS, start, rangeCount);
+		try {
+			start = rangeStore.getNextRange();
+		} catch (InterruptedException e) {
+			throw new IllegalStateException("ZKInt32IdGenerator 初始值获取失败!!!");
 		}
 		rangeSequence = new RangeSequence(1, start, rangeCount, rangeStore);
 		rangeSequence.start();
@@ -37,4 +41,7 @@ public class ZKInt32IdGenerator implements IDGenerator<Integer> {
 		return (int) rangeSequence.incrementAndGet();
 	}
 
+	public void stopRangeSeq(){
+		rangeSequence.stop();
+	}
 }

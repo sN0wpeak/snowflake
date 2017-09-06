@@ -5,10 +5,13 @@ import com.alibaba.fastjson.support.spring.FastJsonHttpMessageConverter4;
 import io.shuidi.snowflake.core.error.ServiceErrorException;
 import io.shuidi.snowflake.core.error.enums.ErrorCode;
 import io.shuidi.snowflake.core.report.ReporterHolder;
-import io.shuidi.snowflake.server.annotation.AuthUseragent;
+import io.shuidi.snowflake.core.service.PartnerStoreHolder;
+import io.shuidi.snowflake.server.annotation.PartnerKeyRequire;
 import io.shuidi.snowflake.server.web.model.ResultModel;
 import io.shuidi.snowflake.server.web.model.ResultResolver;
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpOutputMessage;
@@ -28,9 +31,7 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.reflect.Type;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -53,21 +54,19 @@ public class WebConfiguration extends WebMvcConfigurationSupport {
 
 	@Override
 	protected void addInterceptors(InterceptorRegistry registry) {
-		registry.addInterceptor(authHandlerInterceptor());
+		registry.addInterceptor(partnerkeyHandlerInterceptor());
 		super.addInterceptors(registry);
 	}
 
 
 	@Bean
-	public HandlerInterceptorAdapter authHandlerInterceptor() {
+	public HandlerInterceptorAdapter partnerkeyHandlerInterceptor() {
 		return new HandlerInterceptorAdapter() {
-
 			private Pattern agentParser = Pattern.compile("([a-zA-Z][a-zA-Z\\-0-9]*)");
-			private Map<String, String> APP_SECRET = new HashMap<>();
 
-			public AuthUseragent getAuthUseragent(Object handler) {
+			public PartnerKeyRequire getAuthpartnerKey(Object handler) {
 				if (handler instanceof HandlerMethod) {
-					return ((HandlerMethod) handler).getMethodAnnotation(AuthUseragent.class);
+					return ((HandlerMethod) handler).getMethodAnnotation(PartnerKeyRequire.class);
 				} else {
 					return null;
 				}
@@ -75,21 +74,26 @@ public class WebConfiguration extends WebMvcConfigurationSupport {
 
 			@Override
 			public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-				AuthUseragent authentication = getAuthUseragent(handler);
+				PartnerKeyRequire authentication = getAuthpartnerKey(handler);
 				if (authentication == null) {
 					return true;
 				}
-				if (!validUseragent(request.getParameter("useragent"))) {
+				if (!validpartnerKey(request.getParameter("partnerKey"))) {
 					throw new ServiceErrorException(ErrorCode.AUTHENTICATION_FAILURE);
 				}
 				return true;
 			}
 
-			public boolean validUseragent(String useragent) {
-				if (StringUtils.isEmpty(useragent)) {
+			public boolean validpartnerKey(String partnerKey) {
+				if (StringUtils.isEmpty(partnerKey)) {
 					return false;
 				}
-				return agentParser.matcher(useragent).matches();
+				if (agentParser.matcher(partnerKey).matches()) {
+					if (PartnerStoreHolder.getBizStore().getPartner(partnerKey) != null) {
+						return true;
+					}
+				}
+				return false;
 			}
 		};
 	}
@@ -98,6 +102,8 @@ public class WebConfiguration extends WebMvcConfigurationSupport {
 	public HandlerExceptionResolver customHandlerExceptionResolver() {
 
 		return new AbstractHandlerExceptionResolver() {
+			private Logger LOGGER = LoggerFactory.getLogger(HandlerInterceptorAdapter.class);
+
 			@Override
 			protected ModelAndView doResolveException(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,
 			                                          Object o,
@@ -109,10 +115,13 @@ public class WebConfiguration extends WebMvcConfigurationSupport {
 					ServiceErrorException serviceErrorException = (ServiceErrorException) e;
 					resultModel.setCode(serviceErrorException.getCode());
 					resultModel.setMsg(serviceErrorException.getMessage());
+//					LOGGER.error(serviceErrorException.getMessage());
 				} else {
 					resultModel.setCode(ErrorCode.SYSTEM_ERROR.getCode());
 					resultModel.setMsg(ErrorCode.SYSTEM_ERROR.getDesc());
+
 				}
+				LOGGER.error("error", e);
 				ReporterHolder.incException(String.format("%s.%d", e.getClass().getSimpleName(), resultModel.getCode()));
 				printJson(httpServletResponse, resultModel);
 				return modelAndView;

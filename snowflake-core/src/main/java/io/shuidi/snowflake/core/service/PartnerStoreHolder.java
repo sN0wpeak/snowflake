@@ -8,20 +8,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Author: Alvin Tian
  * Date: 2017/9/5 14:56
  */
-public class BizStoreHolder {
+public class PartnerStoreHolder {
 
-	private static BizStore bizStore;
+	private static volatile PartnerStore bizStore;
 	private static final AtomicBoolean intied = new AtomicBoolean(false);
 
 	public static void init(CuratorFramework client, String bizStorePath) {
 		if (intied.compareAndSet(false, true)) {
-			bizStore = new BizStore(client, bizStorePath);
+			bizStore = new PartnerStore(client, bizStorePath);
 			bizStore.init();
 		}
 	}
 
 
-	public static BizStore getBizStore() {
+	public static PartnerStore getBizStore() {
 		return bizStore;
 	}
 }

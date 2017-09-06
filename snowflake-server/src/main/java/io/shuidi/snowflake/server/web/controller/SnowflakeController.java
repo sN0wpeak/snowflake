@@ -4,9 +4,9 @@ import com.google.common.collect.ImmutableMap;
 import io.shuidi.snowflake.core.error.ServiceErrorException;
 import io.shuidi.snowflake.core.error.enums.ErrorCode;
 import io.shuidi.snowflake.core.report.ReporterHolder;
-import io.shuidi.snowflake.core.service.BizInfo;
-import io.shuidi.snowflake.core.service.BizStoreHolder;
-import io.shuidi.snowflake.server.annotation.AuthUseragent;
+import io.shuidi.snowflake.core.service.PartnerStoreHolder;
+import io.shuidi.snowflake.core.service.Partner;
+import io.shuidi.snowflake.server.annotation.PartnerKeyRequire;
 import io.shuidi.snowflake.server.service.SnowflakeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
@@ -31,21 +31,21 @@ public class SnowflakeController {
 
 	@RequestMapping(path = "/get-id", method = {RequestMethod.GET}, produces = {"application/json;charset=UTF-8"})
 	@ResponseBody
-	@AuthUseragent
-	public Map<String, Long> getId(@RequestParam("useragent") String useragent) {
-		long id = snowflakeService.generateId(useragent);
+	@PartnerKeyRequire
+	public Map<String, Long> getId(@RequestParam("partnerKey") String partnerKey) {
+		long id = snowflakeService.generateId(partnerKey);
 		ReporterHolder.metrics.counter("ids_generated").inc();
-		ReporterHolder.metrics.counter("ids_generated_" + useragent).inc();
+		ReporterHolder.metrics.counter("ids_generated_" + partnerKey).inc();
 		return ImmutableMap.of("id", id);
 	}
 
 	@RequestMapping(path = "/get-id32", method = {RequestMethod.GET}, produces = {"application/json;charset=UTF-8"})
 	@ResponseBody
-	@AuthUseragent
-	public Map<String, Integer> getId32(@RequestParam("useragent") String useragent) {
-		int id = snowflakeService.generateId32(useragent);
+	@PartnerKeyRequire
+	public Map<String, Integer> getId32(@RequestParam("partnerKey") String partnerKey) {
+		int id = snowflakeService.generateId32(partnerKey);
 		ReporterHolder.metrics.counter("ids_generated").inc();
-		ReporterHolder.metrics.counter("ids_generated_" + useragent).inc();
+		ReporterHolder.metrics.counter("ids_generated_" + partnerKey).inc();
 		return ImmutableMap.of("id", id);
 	}
 
@@ -66,11 +66,11 @@ public class SnowflakeController {
 
 	@RequestMapping(path = "/add-biz", method = {RequestMethod.POST}, produces = {"application/json;charset=UTF-8"})
 	@ResponseBody
-	public String addBiz(@RequestBody @Valid BizInfo bizInfo, BindingResult result) throws Exception {
+	public String addBiz(@RequestBody @Valid Partner bizInfo, BindingResult result) throws Exception {
 		if (result.hasErrors()) {
 			throw new ServiceErrorException(ErrorCode.SYSTEM_PARAM_ERROR);
 		}
-		BizStoreHolder.getBizStore().addBiz(bizInfo.getAppKey(), bizInfo);
+		PartnerStoreHolder.getBizStore().addPartner(bizInfo.getPartnerKey(), bizInfo);
 		return "ok";
 	}
 

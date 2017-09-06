@@ -1,6 +1,6 @@
 package io.shuidi.snowflake.core.util.sequence;
 
-import io.shuidi.snowflake.core.util.zk.CuratorFrameworkUtils;
+import io.shuidi.snowflake.core.util.zk.ZkUtils;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.utils.ZKPaths;
 import org.apache.zookeeper.KeeperException;
@@ -19,7 +19,7 @@ public class TestSeqBase {
 	public ZkRangeStore getZkRangeStore(int clientIndex) {
 		String lockPath = "/snowflake/locks";
 		String storePath = "/snowflake/idstore";
-		CuratorFramework curatorFramework = CuratorFrameworkUtils.create("127.0.0.1:2181", 1000, 10000);
+		CuratorFramework curatorFramework = ZkUtils.create("127.0.0.1:2181", 1000, 10000);
 		curatorFramework.start();
 		for (String client : clients) {
 			try {

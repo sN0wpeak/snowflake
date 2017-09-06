@@ -3,6 +3,7 @@ package io.shuidi.snowflake.core.util.sequence;
 import io.shuidi.snowflake.core.report.ReporterHolder;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.locks.InterProcessMutex;
+import org.apache.curator.utils.CloseableUtils;
 import org.apache.curator.utils.ZKPaths;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
@@ -24,18 +25,18 @@ public class ZkRangeStore implements RangeStore {
 	private CuratorFramework client;
 	private long initialValue;
 	private int rangeSize;
-	private String storePath;
+	private String sequencePath;
 	private long time;
 	private TimeUnit unit;
 
-	public ZkRangeStore(String clientName, CuratorFramework client, String lockPath, String storePath, long time, TimeUnit unit,
+	public ZkRangeStore(String clientName, CuratorFramework client, String lockPath, String sequencePath, long time, TimeUnit unit,
 	                    long initialValue, int rangeSize) {
 		this.clientName = clientName;
 		this.client = client;
 		this.initialValue = initialValue;
 		this.rangeSize = rangeSize;
 		lockPath = ZKPaths.makePath(lockPath, clientName);
-		this.storePath = ZKPaths.makePath(storePath, clientName);
+		this.sequencePath = ZKPaths.makePath(sequencePath, clientName);
 		this.time = time;
 		this.unit = unit;
 		this.lock = new InterProcessMutex(client, lockPath);
@@ -65,11 +66,11 @@ public class ZkRangeStore implements RangeStore {
 			while (true) {
 				try {
 					client.sync()
-					      .forPath(storePath);
+					      .forPath(sequencePath);
 
-					long value = Long.parseLong(new String(client.getData().forPath(storePath)));
+					long value = Long.parseLong(new String(client.getData().forPath(sequencePath)));
 					client.setData()
-					      .forPath(storePath, String.valueOf(value + rangeSize).getBytes());
+					      .forPath(sequencePath, String.valueOf(value + rangeSize).getBytes());
 					this.value = value;
 					LOGGER.info("" +
 					            "getNextRange Client: {}, Value: {}", clientName, value);
@@ -79,7 +80,7 @@ public class ZkRangeStore implements RangeStore {
 						try {
 							client.create()
 							      .creatingParentsIfNeeded()
-							      .withMode(CreateMode.PERSISTENT).forPath(storePath, String.valueOf(initialValue).getBytes());
+							      .withMode(CreateMode.PERSISTENT).forPath(sequencePath, String.valueOf(initialValue).getBytes());
 						} catch (Exception e1) {
 							LOGGER.error("opt value " + clientName, e);
 							ReporterHolder.incException(e);
@@ -115,5 +116,10 @@ public class ZkRangeStore implements RangeStore {
 	@Override
 	public String toString() {
 		return clientName;
+	}
+
+	@Override
+	public void close() {
+		CloseableUtils.closeQuietly(client);
 	}
 }

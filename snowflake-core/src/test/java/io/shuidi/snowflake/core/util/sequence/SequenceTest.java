@@ -1,8 +1,6 @@
 package io.shuidi.snowflake.core.util.sequence;
 
 import com.google.common.collect.Lists;
-import io.shuidi.snowflake.core.util.zk.CuratorFrameworkUtils;
-import org.apache.curator.framework.CuratorFramework;
 import org.junit.Assert;
 import org.junit.Test;
 

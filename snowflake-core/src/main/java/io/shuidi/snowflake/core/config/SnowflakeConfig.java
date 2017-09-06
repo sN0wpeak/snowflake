@@ -1,15 +1,15 @@
 package io.shuidi.snowflake.core.config;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
 
 /**
  * Author: Alvin Tian
  * Date: 2017/8/23 17:21
  */
-@Configuration
+@Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class SnowflakeConfig {
 
@@ -23,6 +23,7 @@ public class SnowflakeConfig {
 	private static String storePath;
 	private static int port;
 	private static String server;
+	private static String sequencePath;
 
 	public SnowflakeConfig() {
 
@@ -30,6 +31,15 @@ public class SnowflakeConfig {
 
 	public static String getLeaderPath() {
 		return leaderPath;
+	}
+
+	public static String getSequencePath() {
+		return sequencePath;
+	}
+
+	@Value("${snowflake.config.sequencePath}")
+	public void setSequencePath(String sequencePath) {
+		SnowflakeConfig.sequencePath = sequencePath;
 	}
 
 	@Value("${snowflake.config.leaderPath}")

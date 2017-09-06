@@ -11,7 +11,10 @@ import io.shuidi.snowflake.core.config.SnowflakeConfig;
 import io.shuidi.snowflake.core.error.ServiceErrorException;
 import io.shuidi.snowflake.core.error.enums.ErrorCode;
 import io.shuidi.snowflake.core.report.ReporterHolder;
+import io.shuidi.snowflake.core.service.PartnerStoreHolder;
+import io.shuidi.snowflake.core.service.impl.SnowflakeIDGenerator;
 import io.shuidi.snowflake.core.util.RetryRunner;
+import io.shuidi.snowflake.core.util.zk.ZkUtils;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.leader.CancelLeadershipException;
 import org.apache.curator.framework.recipes.leader.LeaderSelector;
@@ -24,6 +27,7 @@ import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
@@ -47,17 +51,17 @@ import static io.shuidi.snowflake.core.service.impl.SnowflakeIDGenerator.WORKER_
  */
 
 @Service
-public class SnowflakeServer implements LeaderSelectorListener, Closeable, Watcher {
+public class SnowflakeServer implements LeaderSelectorListener, Closeable, Watcher, SmartInitializingSingleton {
 	private SnowflakeClient snowflakeClient = new SnowflakeClient();
 	private static Logger LOGGER = LoggerFactory.getLogger(SnowflakeServer.class);
 
 	private static final byte[] NONE = new byte[]{};
 
-	public void setZkClient(CuratorFramework zkClient) {
-		this.zkClient = zkClient;
+	public void setClient(CuratorFramework client) {
+		this.client = client;
 	}
 
-	private CuratorFramework zkClient;
+	private CuratorFramework client;
 
 	private LeaderSelector leaderSelector;
 	private volatile boolean isLeader = false;
@@ -65,10 +69,12 @@ public class SnowflakeServer implements LeaderSelectorListener, Closeable, Watch
 	private volatile int workerId = -1;
 
 	public void start() throws Exception {
-		leaderSelector = new LeaderSelector(zkClient, SnowflakeConfig.getLeaderPath(), this);
+		client.start();
+
+		leaderSelector = new LeaderSelector(client, SnowflakeConfig.getLeaderPath(), this);
 		leaderSelector.autoRequeue();
 		LOGGER.info("start SnowflakeServer... ip: {}", getHostname());
-		zkClient.start();
+
 		leaderSelector.start();
 		while (!hasLeader()) {
 			Thread.sleep(1000);
@@ -163,9 +169,9 @@ public class SnowflakeServer implements LeaderSelectorListener, Closeable, Watch
 		           .run((Callable<Void>) () -> {
 			           String path = String.format("%s/%s", SnowflakeConfig.getWorkerIdZkPath(), workerId + "");
 			           LOGGER.info("registerWorkerId: {} path:{}", workerId, path);
-			           zkClient.create().withMode(CreateMode.EPHEMERAL)
-			                   .forPath(path,
-			                            (getHostname() + ":" + SnowflakeConfig.getPort()).getBytes());
+			           client.create().withMode(CreateMode.EPHEMERAL)
+			                 .forPath(path,
+			                          (getHostname() + ":" + SnowflakeConfig.getPort()).getBytes());
 			           this.workerId = workerId;
 			           waitRegWorkerIds.add(workerId);
 			           return null;
@@ -223,15 +229,15 @@ public class SnowflakeServer implements LeaderSelectorListener, Closeable, Watch
 		 */
 		ImmutableMap.Builder<Integer, Peer> peerBuilder = ImmutableMap.builder();
 		try {
-			zkClient.getData().forPath(SnowflakeConfig.getWorkerIdZkPath());
+			client.getData().forPath(SnowflakeConfig.getWorkerIdZkPath());
 		} catch (Exception e) {
-			zkClient.create().withMode(CreateMode.PERSISTENT).forPath(SnowflakeConfig.getWorkerIdZkPath(), NONE);
+			client.create().withMode(CreateMode.PERSISTENT).forPath(SnowflakeConfig.getWorkerIdZkPath(), NONE);
 		}
-		List<String> children = zkClient.getChildren().forPath(SnowflakeConfig.getWorkerIdZkPath());
+		List<String> children = client.getChildren().forPath(SnowflakeConfig.getWorkerIdZkPath());
 		for (String child : children) {
 			String chidPath = String.format("%s/%s", SnowflakeConfig.getWorkerIdZkPath(), child);
 			LOGGER.info(chidPath);
-			String peer = new String(zkClient.getData().forPath(chidPath));
+			String peer = new String(client.getData().forPath(chidPath));
 			if (StringUtils.isEmpty(peer)) {
 				continue;
 			}
@@ -274,7 +280,7 @@ public class SnowflakeServer implements LeaderSelectorListener, Closeable, Watch
 			}
 		}
 		isLeader = false;
-		zkClient.watches().remove(this);
+		client.watches().remove(this);
 
 	}
 
@@ -295,7 +301,7 @@ public class SnowflakeServer implements LeaderSelectorListener, Closeable, Watch
 	@Override
 	public void close() {
 		CloseableUtils.closeQuietly(leaderSelector);
-		CloseableUtils.closeQuietly(zkClient);
+		CloseableUtils.closeQuietly(client);
 	}
 
 	public int getWorkerId() {
@@ -323,7 +329,7 @@ public class SnowflakeServer implements LeaderSelectorListener, Closeable, Watch
 		int tries = 0;
 		while (!Thread.currentThread().isInterrupted()) {
 			try {
-				zkClient.getChildren().usingWatcher(this).forPath(SnowflakeConfig.getWorkerIdZkPath());
+				client.getChildren().usingWatcher(this).forPath(SnowflakeConfig.getWorkerIdZkPath());
 				List<Integer> workerIds = peers().keySet().asList();
 				waitRegWorkerIds.removeAll(workerIds);
 				break;
@@ -340,6 +346,26 @@ public class SnowflakeServer implements LeaderSelectorListener, Closeable, Watch
 				}
 			}
 		}
+	}
+
+	@Override
+	public void afterSingletonsInstantiated() {
+
+		this.setClient(ZkUtils.create());
+		try {
+			this.start();
+		} catch (Exception e) {
+			throw new IllegalStateException(e);
+		}
+		if (this.getWorkerId() > 0) {
+			SnowflakeIDGenerator.setWorkerId(this.getWorkerId());
+		}
+		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+			try {
+				close();
+			} catch (Exception e) {
+			}
+		}));
 	}
 
 	public static class Peer {

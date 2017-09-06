@@ -10,12 +10,14 @@ import java.util.Map;
  */
 public enum ErrorCode {
 
-	AUTHENTICATION_FAILURE(4, "鉴权失败"),
+	AUTHENTICATION_FAILURE(4, "授权失败！"),
 	SYSTEM_PARAM_ERROR(3, "参数错误"),
 	SYSTEM_STOP(2, "系统关系!"),
 	SYSTEM_ERROR(1, "系统异常!"),
 	SNOW_NOT_A_LEADER(10002, "当前节点不是LEADER"),
-	SNOW_NOT_MORE_WORKER_ID(10001, "没有足够的workerId"),;
+	SNOW_NOT_MORE_WORKER_ID(10001, "没有足够的workerId"),
+	SNOW_GET_NEXT_SEQUENCE_ERROR(10003, "获取该序列异常!");
+
 	private int code;
 	private String desc;
 

@@ -10,7 +10,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sun.misc.Unsafe;
 
+import java.io.IOException;
 import java.util.concurrent.Exchanger;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -90,27 +93,34 @@ public class RangeSequence {
 		synchronized (this) {
 			long v = sequence.incrementAndGet();
 			long sc;
+
 			if ((v > (sc = sizeCtl)) && v <= Long.MAX_VALUE) {
 				v = getNextValue(v);
 				sizeCtl = v + rangeCount;
 				v = v + 1;
 				sequence.set(v);
 			}
+
 			return v;
 		}
 
 	}
 
 	public long getNextValue(long v) {
+		int tries = 0;
 		while (true) {
 			try {
-				v = exchanger.exchange(v);
+				v = exchanger.exchange(v, 100, TimeUnit.MILLISECONDS);
 				return v;
 			} catch (InterruptedException e) {
 				if (ctl.get() == STOP) {
 					throw new ServiceErrorException(ErrorCode.SYSTEM_STOP);
 				} else {
 					throw new ServiceErrorException(ErrorCode.SYSTEM_ERROR);
+				}
+			} catch (TimeoutException e) {
+				if(tries++ > 2) {
+					throw new ServiceErrorException(ErrorCode.SNOW_GET_NEXT_SEQUENCE_ERROR);
 				}
 			}
 		}
@@ -131,15 +141,23 @@ public class RangeSequence {
 	public void stop() {
 		if (ctl.compareAndSet(RUNNING, STOP)) {
 			LOGGER.info("RangeSequence will stop...");
+			try {
+				rangeStore.close();
+			} catch (IOException e) {
+			}
+			rangeStoreThread.interrupt();
 		}
 	}
 
+	private volatile Thread rangeStoreThread;
+
 	public void start() {
+		rangeStoreThread = Thread.currentThread();
 		if (ctl.compareAndSet(INITIAL, RUNNING)) {
 			ReporterHolder.metrics.counter("RangeSeq." + rangeStore.getClass().getSimpleName()).inc();
 			ThreadPools.sequenceExecutor.execute(() -> {
+				long v = 0;
 				while (ctl.get() != STOP || !Thread.currentThread().isInterrupted()) {
-					long v;
 					try {
 						v = rangeStore.getNextRange();
 						exchanger.exchange(v);
@@ -148,10 +166,17 @@ public class RangeSequence {
 						Thread.currentThread().interrupt();
 					}
 				}
-
+				saveLeftSeq(v);
 			});
 			ReporterHolder.metrics.counter("RangeSeq." + rangeStore.getClass().getSimpleName()).dec();
 			LOGGER.info("RangeSequence{} stop...", rangeStore.toString());
+		}
+	}
+
+	public void saveLeftSeq(long v) {
+		// TODO: 2017/9/6 保存现场
+		long curr = sequence.get();
+		if (v >= curr) {
 		}
 	}
 }

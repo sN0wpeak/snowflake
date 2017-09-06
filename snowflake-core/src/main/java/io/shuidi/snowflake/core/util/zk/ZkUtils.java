@@ -14,7 +14,7 @@ import org.springframework.core.annotation.Order;
  */
 @Configuration
 @Order(Ordered.HIGHEST_PRECEDENCE)
-public class CuratorFrameworkUtils {
+public class ZkUtils {
 
 
 	private static String connectionString;
@@ -47,7 +47,7 @@ public class CuratorFrameworkUtils {
 
 	@Value("${snowflake.zk.hosts}")
 	public void setConnectionString(String connectionString) {
-		CuratorFrameworkUtils.connectionString = connectionString;
+		ZkUtils.connectionString = connectionString;
 	}
 
 	public static int getConnectionTimeoutMs() {
@@ -56,7 +56,7 @@ public class CuratorFrameworkUtils {
 
 	@Value("${snowflake.zk.connectionTimeout}")
 	public void setConnectionTimeoutMs(int connectionTimeoutMs) {
-		CuratorFrameworkUtils.connectionTimeoutMs = connectionTimeoutMs;
+		ZkUtils.connectionTimeoutMs = connectionTimeoutMs;
 	}
 
 	public static int getSessionTimeoutMs() {
@@ -65,7 +65,7 @@ public class CuratorFrameworkUtils {
 
 	@Value("${snowflake.zk.sessionTimeout}")
 	public void setSessionTimeoutMs(int sessionTimeoutMs) {
-		CuratorFrameworkUtils.sessionTimeoutMs = sessionTimeoutMs;
+		ZkUtils.sessionTimeoutMs = sessionTimeoutMs;
 	}
 
 }
