@@ -34,8 +34,8 @@ public class SnowflakeController {
 	@PartnerKeyRequire
 	public Map<String, Long> getId(@RequestParam("partnerKey") String partnerKey) {
 		long id = snowflakeService.generateId(partnerKey);
-		ReporterHolder.metrics.counter("ids_generated").inc();
-		ReporterHolder.metrics.counter("ids_generated_" + partnerKey).inc();
+		ReporterHolder.metrics.counter("ids_generated64").inc();
+		ReporterHolder.metrics.counter("ids_generated64_" + partnerKey).inc();
 		return ImmutableMap.of("id", id);
 	}
 
@@ -44,8 +44,8 @@ public class SnowflakeController {
 	@PartnerKeyRequire
 	public Map<String, Integer> getId32(@RequestParam("partnerKey") String partnerKey) {
 		int id = snowflakeService.generateId32(partnerKey);
-		ReporterHolder.metrics.counter("ids_generated").inc();
-		ReporterHolder.metrics.counter("ids_generated_" + partnerKey).inc();
+		ReporterHolder.metrics.counter("ids_generated32").inc();
+		ReporterHolder.metrics.counter("ids_generated32_" + partnerKey).inc();
 		return ImmutableMap.of("id", id);
 	}
 

@@ -1,5 +1,6 @@
 package io.shuidi.snowflake.core.util.sequence;
 
+import com.codahale.metrics.Timer;
 import io.shuidi.snowflake.core.report.ReporterHolder;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.locks.InterProcessMutex;
@@ -11,6 +12,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.TimeUnit;
+
+import static com.codahale.metrics.MetricRegistry.name;
 
 /**
  * Author: Alvin Tian
@@ -47,6 +50,8 @@ public class ZkRangeStore implements RangeStore {
 
 	@Override
 	public long getNextRange() throws InterruptedException {
+		final Timer timer = ReporterHolder.metrics.timer(name("ZKRangeStore." + clientName, "getNextRange"));
+		final Timer.Context context = timer.time();
 		try {
 			while (true) {
 				try {
@@ -95,6 +100,7 @@ public class ZkRangeStore implements RangeStore {
 			}
 		} finally {
 			try {
+				context.stop();
 				lock.release();
 			} catch (Exception e) {
 				if (e instanceof InterruptedException) {

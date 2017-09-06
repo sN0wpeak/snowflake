@@ -1,5 +1,6 @@
 package io.shuidi.snowflake.core.util.sequence;
 
+import com.codahale.metrics.Timer;
 import com.google.common.base.Preconditions;
 import io.shuidi.snowflake.core.error.ServiceErrorException;
 import io.shuidi.snowflake.core.error.enums.ErrorCode;
@@ -15,6 +16,8 @@ import java.util.concurrent.Exchanger;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static com.codahale.metrics.MetricRegistry.name;
 
 /**
  * Author: Alvin Tian
@@ -107,6 +110,7 @@ public class RangeSequence {
 	}
 
 	public long getNextValue(long v) {
+
 		int tries = 0;
 		while (true) {
 			try {
@@ -119,7 +123,7 @@ public class RangeSequence {
 					throw new ServiceErrorException(ErrorCode.SYSTEM_ERROR);
 				}
 			} catch (TimeoutException e) {
-				if(tries++ > 2) {
+				if (tries++ > 2) {
 					throw new ServiceErrorException(ErrorCode.SNOW_GET_NEXT_SEQUENCE_ERROR);
 				}
 			}
@@ -159,6 +163,7 @@ public class RangeSequence {
 				long v = 0;
 				while (ctl.get() != STOP || !Thread.currentThread().isInterrupted()) {
 					try {
+
 						v = rangeStore.getNextRange();
 						exchanger.exchange(v);
 					} catch (InterruptedException e) {
@@ -178,5 +183,9 @@ public class RangeSequence {
 		long curr = sequence.get();
 		if (v >= curr) {
 		}
+	}
+
+	public long get() {
+		return sequence.get();
 	}
 }
