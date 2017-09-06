@@ -172,9 +172,10 @@ public class RangeSequence {
 					}
 				}
 				saveLeftSeq(v);
+				LOGGER.info("RangeSequence.{} stop...", rangeStore.toString());
 			});
 			ReporterHolder.metrics.counter("RangeSeq." + rangeStore.getClass().getSimpleName()).dec();
-			LOGGER.info("RangeSequence{} stop...", rangeStore.toString());
+			LOGGER.info("RangeSequence.{} start...", rangeStore.toString());
 		}
 	}
 

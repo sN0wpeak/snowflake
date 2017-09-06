@@ -6,7 +6,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.util.CollectionUtils;
 
-import javax.management.RuntimeMBeanException;
 import java.util.List;
 import java.util.concurrent.Callable;
 
@@ -15,8 +14,10 @@ import java.util.concurrent.Callable;
  * Date: 2017/8/30 21:11
  */
 public class RetryRunner {
-	private boolean throwException;
+	private boolean throwException = false;
 	private RetryErrorCallable retryErrorCallable;
+	private RetryErrorCallable finalErrorCallable;
+
 
 	private RetryRunner() {
 	}
@@ -26,7 +27,8 @@ public class RetryRunner {
 
 	private int retryLimit = 3;
 	private long sleep = 1000;
-	private List<Class<? extends Exception>> tryExceptions = Lists.newArrayList();
+	private List<Class<? extends Exception>> includeExceptions = Lists.newArrayList();
+	private List<Class<? extends Exception>> excludeExceptions = Lists.newArrayList();
 
 	public static RetryRunner create() {
 		return new RetryRunner();
@@ -44,14 +46,25 @@ public class RetryRunner {
 		return this;
 	}
 
-	public RetryRunner addTryExceptions(Class<? extends Exception>... es) {
+	public RetryRunner includeExceptions(Class<? extends Exception>... es) {
 		Preconditions.checkArgument(es.length > 0);
-		tryExceptions.addAll(Lists.newArrayList(es));
+		includeExceptions.addAll(Lists.newArrayList(es));
 		return this;
 	}
 
-	public RetryRunner onError(RetryErrorCallable retryErrorCallable) {
+	public RetryRunner excludeExceptions(Class<? extends Exception>... es) {
+		Preconditions.checkArgument(es.length > 0);
+		excludeExceptions.addAll(Lists.newArrayList(es));
+		return this;
+	}
+
+	public RetryRunner onTryError(RetryErrorCallable retryErrorCallable) {
 		this.retryErrorCallable = retryErrorCallable;
+		return this;
+	}
+
+	public RetryRunner onFinalError(RetryErrorCallable retryErrorCallable) {
+		this.finalErrorCallable = retryErrorCallable;
 		return this;
 	}
 
@@ -66,15 +79,16 @@ public class RetryRunner {
 			try {
 				return vCallable.call();
 			} catch (Exception e) {
+				Class<?> eClass = e.getClass();
+				if (retryErrorCallable != null) {
+					retryErrorCallable.onError(e);
+				}
 				boolean needTry = false;
-				if (!CollectionUtils.isEmpty(tryExceptions)) {
-					for (Class<? extends Exception> includeException : tryExceptions) {
-						if (e.getClass() == includeException) {
-							needTry = true;
-						}
-					}
-				} else {
-					needTry = true;
+				if (!CollectionUtils.isEmpty(includeExceptions)) {
+					needTry = includeExceptions.stream().anyMatch(aClass -> aClass.isAssignableFrom(eClass));
+				}
+				if (!CollectionUtils.isEmpty(excludeExceptions)) {
+					needTry = !excludeExceptions.stream().anyMatch(aClass -> aClass.isAssignableFrom(eClass));
 				}
 				boolean emitError = false;
 				if (needTry) {
@@ -94,16 +108,19 @@ public class RetryRunner {
 					emitError = true;
 				}
 				if (emitError) {
-					LOGGER.warn(String.format("retried %d times... ", retryLimit), e);
+					LOGGER.warn(String.format("retried %d times... ", tries), e);
 					if (retryErrorCallable != null) {
 						try {
 							retryErrorCallable.onError(e);
 						} catch (Exception e1) {
 							LOGGER.warn("call retryErrorCallable error...", e);
+							throw e1;
 						}
 					}
 					if (throwException) {
 						throw new RuntimeException(e);
+					} else {
+						return null;
 					}
 				}
 			}
@@ -115,12 +132,4 @@ public class RetryRunner {
 		void onError(Exception e);
 	}
 
-	public static void main(String[] args) {
-		RetryRunner.create().addTryExceptions(RuntimeMBeanException.class).run(new Callable<Void>() {
-			@Override
-			public Void call() throws Exception {
-				throw new RuntimeException("ceshi");
-			}
-		});
-	}
 }

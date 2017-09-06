@@ -1,7 +1,7 @@
 package io.shuidi.snowflake.core.service;
 
 import com.alibaba.fastjson.JSONObject;
-import com.google.common.collect.Lists;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import io.shuidi.snowflake.core.error.ServiceErrorException;
@@ -9,6 +9,7 @@ import io.shuidi.snowflake.core.error.enums.ErrorCode;
 import io.shuidi.snowflake.core.report.ReporterHolder;
 import io.shuidi.snowflake.core.util.RetryRunner;
 import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.imps.CuratorFrameworkState;
 import org.apache.curator.utils.ZKPaths;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
@@ -16,6 +17,7 @@ import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.util.CollectionUtils;
 
 import java.util.HashMap;
 import java.util.List;
@@ -46,25 +48,43 @@ public class PartnerStore implements Watcher {
 
 	public void init() {
 		if (intied.compareAndSet(false, true)) {
-			client.start();
+			if (client.getState() != CuratorFrameworkState.STARTED) {
+				client.start();
+			}
 			addListioner(new PartnerChangedListener() {
 				@Override
 				public void onAdd(List<String> partners) {
+					if (CollectionUtils.isEmpty(partners)) {
+						return;
+					}
+					LOGGER.info("Partner add new... start");
 					for (String biz : partners) {
-						RetryRunner.create().thenThrow().run(() -> {
+						RetryRunner.create().onFinalError(e -> {
+							LOGGER.error("onAddPartner.error." + biz, e);
+							ReporterHolder.incException(e);
+						}).includeExceptions(KeeperException.class).run(() -> {
 							String partnerPath = ZKPaths.makePath(partnerStorePath, biz);
 							client.sync().forPath(partnerPath);
-							partnerMap.put(biz, JSONObject.parseObject(client.getData().forPath(partnerPath), Partner.class));
+							Partner partner = JSONObject.parseObject(client.getData().forPath(partnerPath), Partner.class);
+							partnerMap.put(biz, partner);
+							LOGGER.info("Partner add new..., Partner: {}, bizInfo: {}", biz, partner);
 							return null;
 						});
 					}
+					LOGGER.info("Partner add new.. done Partners: {}", partnerMap);
 				}
 
 				@Override
 				public void onDelete(List<String> partners) {
+					if (CollectionUtils.isEmpty(partners)) {
+						return;
+					}
+					LOGGER.info("Partner del... start");
 					for (String biz : partners) {
+						LOGGER.info("Partner del... Partner {}", biz);
 						partnerMap.remove(biz);
 					}
+					LOGGER.info("Partner del.. done Partners: {}", partnerMap);
 				}
 
 				@Override
@@ -77,23 +97,42 @@ public class PartnerStore implements Watcher {
 	}
 
 	public void addPartner(String key, Partner partner) {
-		RetryRunner.create().thenThrow().run((Callable<Void>) () -> {
-			try {
+		String partnerPath = ZKPaths.makePath(partnerStorePath, key);
+		RetryRunner.create().onFinalError(e -> {
+			LOGGER.error("addPartner.error", e);
+			ReporterHolder.incException(e);
+			throw new ServiceErrorException(ErrorCode.SYSTEM_ERROR);
+		}).run((Callable<Void>) () -> {
+			if (client.checkExists().creatingParentsIfNeeded().forPath(partnerPath) != null) {
+				client.setData()
+				      .forPath(partnerPath, JSONObject.toJSONBytes(partner));
+			} else {
 				client.create()
 				      .creatingParentsIfNeeded()
 				      .withMode(CreateMode.PERSISTENT)
-				      .forPath(ZKPaths.makePath(partnerStorePath, key), JSONObject.toJSONBytes(partner));
-			} catch (Exception e) {
-				if (e instanceof KeeperException.NodeExistsException) {
-					client.setData()
-					      .forPath(ZKPaths.makePath(partnerStorePath, key), JSONObject.toJSONBytes(partner));
-				} else {
-					LOGGER.error("addPartner.error", e);
-					throw new ServiceErrorException(ErrorCode.SYSTEM_ERROR);
-				}
+				      .forPath(partnerPath, JSONObject.toJSONBytes(partner));
 			}
 			return null;
 		});
+	}
+
+	public void removePartner(String key) {
+		RetryRunner.create()
+		           .excludeExceptions(KeeperException.NoNodeException.class)
+		           .includeExceptions(KeeperException.class)
+		           .onFinalError(e -> {
+			           if (e instanceof KeeperException.NoNodeException) {
+			           } else {
+				           ReporterHolder.incException(e);
+				           LOGGER.error("removePartner.error", e);
+				           throw new ServiceErrorException(ErrorCode.SYSTEM_ERROR);
+			           }
+		           })
+		           .run((Callable<Void>) () -> {
+			           client.delete()
+			                 .forPath(ZKPaths.makePath(partnerStorePath, key));
+			           return null;
+		           });
 	}
 
 	public Map<String, Partner> getPartnerMap() {
@@ -106,35 +145,34 @@ public class PartnerStore implements Watcher {
 
 	public void handlePartner() {
 		RetryRunner.create()
-		           .addTryExceptions(KeeperException.NoNodeException.class)
-		           .onError(e -> {
+		           .includeExceptions(KeeperException.class)
+		           .onFinalError(e -> {
 			           LOGGER.error("PartnerStore.init", e);
 			           ReporterHolder.incException(e);
 		           })
 		           .run((Callable<Void>) () -> {
-			           try {
-				           Set<String> bizs =
-						           Sets.newHashSet(client.getChildren().usingWatcher(PartnerStore.this).forPath(partnerStorePath));
-				           onEvent(bizs);
-			           } catch (Exception e) {
-				           if (e instanceof KeeperException.NoNodeException) {
-					           client.create()
-					                 .creatingParentsIfNeeded()
-					                 .withMode(CreateMode.PERSISTENT)
-					                 .forPath(partnerStorePath);
-				           }
+			           if (client.checkExists().creatingParentsIfNeeded().forPath(partnerStorePath) == null) {
+				           client.create()
+				                 .creatingParentsIfNeeded()
+				                 .withMode(CreateMode.PERSISTENT)
+				                 .forPath(partnerStorePath);
 			           }
+			           Set<String> bizs =
+					           Sets.newHashSet(client.getChildren().usingWatcher(PartnerStore.this).forPath(partnerStorePath));
+			           onEvent(bizs);
 			           return null;
 		           });
 	}
 
 	private void onEvent(Set<String> bizs) {
-		Set<String> addBizs = Sets.difference(bizs, partnerMap.keySet());
-		Set<String> deleteBizs = Sets.difference(partnerMap.keySet(), bizs);
+		List<String> addBizs = ImmutableList.copyOf(Sets.difference(bizs, partnerMap.keySet()));
+		List<String> deleteBizs = ImmutableList.copyOf(Sets.difference(partnerMap.keySet(), bizs));
+		LOGGER.info("new bizs {}", addBizs);
+		LOGGER.info("will delete bizs {}", deleteBizs);
 		for (PartnerChangedListener bizChangedListener : bizChangedListeners) {
 			try {
-				bizChangedListener.onAdd(Lists.newArrayList(addBizs));
-				bizChangedListener.onDelete(Lists.newArrayList(deleteBizs));
+				bizChangedListener.onAdd(addBizs);
+				bizChangedListener.onDelete(deleteBizs);
 			} catch (Exception e) {
 				LOGGER.error(PartnerChangedListener.class.getSimpleName() + ".error!", e);
 			}
@@ -144,6 +182,7 @@ public class PartnerStore implements Watcher {
 
 	@Override
 	public void process(WatchedEvent event) {
+		LOGGER.info("on PartnerStore changed... event: {}", event);
 		handlePartner();
 	}
 

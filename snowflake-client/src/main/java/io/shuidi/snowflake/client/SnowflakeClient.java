@@ -22,7 +22,7 @@ public class SnowflakeClient {
 
 	public int allocWorkerId(String serverHost) {
 		Preconditions.checkNotNull(serverHost);
-		return RetryRunner.create().addTryExceptions(IOException.class).thenThrow().run(() -> {
+		return RetryRunner.create().includeExceptions(IOException.class).thenThrow().run(() -> {
 			String path = "/api/snowflake/get-alloc-workerid";
 			String url = "http://" + serverHost + "/" + path;
 			JSONObject result =
@@ -38,7 +38,7 @@ public class SnowflakeClient {
 
 	public int getWorkerId(String serverHost) {
 		Preconditions.checkNotNull(serverHost);
-		return RetryRunner.create().addTryExceptions(IOException.class).thenThrow().run(() -> {
+		return RetryRunner.create().includeExceptions(IOException.class).thenThrow().run(() -> {
 			String path = "/api/snowflake/get-worker-id";
 			String url = "http://" + serverHost + "/" + path;
 			JSONObject result =
@@ -54,7 +54,7 @@ public class SnowflakeClient {
 
 	public long getId(String serverHost, String query) {
 		Preconditions.checkNotNull(serverHost);
-		return RetryRunner.create().addTryExceptions(IOException.class).thenThrow().run(() -> {
+		return RetryRunner.create().includeExceptions(IOException.class).thenThrow().run(() -> {
 			String path = "/api/snowflake/get-id";
 			if (!StringUtils.isEmpty(query)) {
 				path += "?" + query;
@@ -73,7 +73,7 @@ public class SnowflakeClient {
 
 	public int getId32(String serverHost, String query) {
 		Preconditions.checkNotNull(serverHost);
-		return RetryRunner.create().addTryExceptions(IOException.class).thenThrow().run(() -> {
+		return RetryRunner.create().includeExceptions(IOException.class).thenThrow().run(() -> {
 			String path = "/api/snowflake/get-id32";
 			if (!StringUtils.isEmpty(query)) {
 				path += "?" + query;
@@ -92,7 +92,7 @@ public class SnowflakeClient {
 
 	public String getReport(String serverHost) {
 		Preconditions.checkNotNull(serverHost);
-		return RetryRunner.create().addTryExceptions(IOException.class).thenThrow().run(() -> {
+		return RetryRunner.create().includeExceptions(IOException.class).thenThrow().run(() -> {
 			String path = "/api/snowflake/report";
 			String url = "http://" + serverHost + "/" + path;
 			JSONObject result =

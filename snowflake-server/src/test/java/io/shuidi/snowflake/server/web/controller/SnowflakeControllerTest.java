@@ -124,11 +124,12 @@ public class SnowflakeControllerTest {
 	@Test
 	public void addBiz() throws Exception {
 		Partner bizInfo = new Partner();
-		bizInfo.setPartnerKey("ACCOUNT");
+		bizInfo.setPartnerKey("account");
 		bizInfo.setUseAuth(true);
-		bizInfo.setRangeCount(1000);
-		bizInfo.setStart(1000);
+		bizInfo.setRangeCount(10000);
+		bizInfo.setStart(44900000);
 		bizInfo.setPartnerSecret("Xr&2Rd@1Ng");
+		System.out.println(JSONObject.toJSONString(bizInfo));
 		mockMvc.perform(post("/api/snowflake/add-biz").content(JSONObject.toJSONBytes(bizInfo))
 		                                              .header("Content-Type", "application/json;charset=UTF-8"))
 		       .andDo(MockMvcResultHandlers.print())
@@ -175,6 +176,7 @@ public class SnowflakeControllerTest {
 		System.out.println(stopWatch.prettyPrint());
 		executorService.shutdown();
 	}
+
 
 
 }

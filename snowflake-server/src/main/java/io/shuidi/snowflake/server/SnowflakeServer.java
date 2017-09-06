@@ -11,7 +11,6 @@ import io.shuidi.snowflake.core.config.SnowflakeConfig;
 import io.shuidi.snowflake.core.error.ServiceErrorException;
 import io.shuidi.snowflake.core.error.enums.ErrorCode;
 import io.shuidi.snowflake.core.report.ReporterHolder;
-import io.shuidi.snowflake.core.service.PartnerStoreHolder;
 import io.shuidi.snowflake.core.service.impl.SnowflakeIDGenerator;
 import io.shuidi.snowflake.core.util.RetryRunner;
 import io.shuidi.snowflake.core.util.zk.ZkUtils;
@@ -93,8 +92,8 @@ public class SnowflakeServer implements LeaderSelectorListener, Closeable, Watch
 
 	private void initWorkerId() throws Exception {
 		RetryRunner.create()
-		           .addTryExceptions(KeeperException.NodeExistsException.class)
-		           .onError(e -> ReporterHolder.incException(e))
+		           .includeExceptions(KeeperException.class)
+		           .onFinalError(e -> ReporterHolder.incException(e))
 		           .thenThrow()
 		           .run(() -> {
 			           int workerId = genWorkid();
@@ -136,8 +135,8 @@ public class SnowflakeServer implements LeaderSelectorListener, Closeable, Watch
 
 	public String getLeaderUrl() {
 		return RetryRunner.create()
-		                  .addTryExceptions(KeeperException.NodeExistsException.class)
-		                  .onError(e -> {
+		                  .includeExceptions(KeeperException.class)
+		                  .onFinalError(e -> {
 			                  LOGGER.error("getLeaderUrl", e);
 			                  ReporterHolder.incException(e);
 		                  })
@@ -158,10 +157,9 @@ public class SnowflakeServer implements LeaderSelectorListener, Closeable, Watch
 			ReporterHolder.incException(e);
 			throw e;
 		}
-
 		RetryRunner.create()
-		           .addTryExceptions(KeeperException.NodeExistsException.class)
-		           .onError(e -> {
+		           .includeExceptions(KeeperException.class)
+		           .onFinalError(e -> {
 			           ReporterHolder.incException(e);
 			           LOGGER.error("registerWorkerId", e);
 		           })
@@ -229,11 +227,16 @@ public class SnowflakeServer implements LeaderSelectorListener, Closeable, Watch
 		 */
 		ImmutableMap.Builder<Integer, Peer> peerBuilder = ImmutableMap.builder();
 		try {
-			client.getData().forPath(SnowflakeConfig.getWorkerIdZkPath());
+			client.getData()
+			      .forPath(SnowflakeConfig.getWorkerIdZkPath());
 		} catch (Exception e) {
-			client.create().withMode(CreateMode.PERSISTENT).forPath(SnowflakeConfig.getWorkerIdZkPath(), NONE);
+			client.create()
+			      .creatingParentsIfNeeded()
+			      .withMode(CreateMode.PERSISTENT)
+			      .forPath(SnowflakeConfig.getWorkerIdZkPath());
 		}
 		List<String> children = client.getChildren().forPath(SnowflakeConfig.getWorkerIdZkPath());
+
 		for (String child : children) {
 			String chidPath = String.format("%s/%s", SnowflakeConfig.getWorkerIdZkPath(), child);
 			LOGGER.info(chidPath);

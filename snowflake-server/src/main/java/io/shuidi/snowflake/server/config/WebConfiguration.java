@@ -2,6 +2,7 @@ package io.shuidi.snowflake.server.config;
 
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.support.spring.FastJsonHttpMessageConverter4;
+import io.shuidi.snowflake.core.error.PartnerAuthenticationFailedException;
 import io.shuidi.snowflake.core.error.ServiceErrorException;
 import io.shuidi.snowflake.core.error.enums.ErrorCode;
 import io.shuidi.snowflake.core.report.ReporterHolder;
@@ -62,6 +63,8 @@ public class WebConfiguration extends WebMvcConfigurationSupport {
 	@Bean
 	public HandlerInterceptorAdapter partnerkeyHandlerInterceptor() {
 		return new HandlerInterceptorAdapter() {
+			private Logger LOGGER = LoggerFactory.getLogger(HandlerInterceptorAdapter.class);
+
 			private Pattern agentParser = Pattern.compile("([a-zA-Z][a-zA-Z\\-0-9]*)");
 
 			public PartnerKeyRequire getAuthpartnerKey(Object handler) {
@@ -78,8 +81,10 @@ public class WebConfiguration extends WebMvcConfigurationSupport {
 				if (authentication == null) {
 					return true;
 				}
-				if (!validpartnerKey(request.getParameter("partnerKey"))) {
-					throw new ServiceErrorException(ErrorCode.AUTHENTICATION_FAILURE);
+				String partnerKey = request.getParameter("partnerKey");
+				if (!validpartnerKey(partnerKey)) {
+					LOGGER.warn("error partnerKey: {}", partnerKey);
+					throw new PartnerAuthenticationFailedException();
 				}
 				return true;
 			}
@@ -102,7 +107,7 @@ public class WebConfiguration extends WebMvcConfigurationSupport {
 	public HandlerExceptionResolver customHandlerExceptionResolver() {
 
 		return new AbstractHandlerExceptionResolver() {
-			private Logger LOGGER = LoggerFactory.getLogger(HandlerInterceptorAdapter.class);
+			private Logger LOGGER = LoggerFactory.getLogger(AbstractHandlerExceptionResolver.class);
 
 			@Override
 			protected ModelAndView doResolveException(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,
@@ -115,13 +120,18 @@ public class WebConfiguration extends WebMvcConfigurationSupport {
 					ServiceErrorException serviceErrorException = (ServiceErrorException) e;
 					resultModel.setCode(serviceErrorException.getCode());
 					resultModel.setMsg(serviceErrorException.getMessage());
-//					LOGGER.error(serviceErrorException.getMessage());
+					LOGGER.error("ServiceErrorException {}", serviceErrorException.getErrorCode().getDesc());
+				}
+				if (e instanceof PartnerAuthenticationFailedException) {
+					resultModel.setCode(ErrorCode.AUTHENTICATION_FAILURE.getCode());
+					resultModel.setMsg(ErrorCode.AUTHENTICATION_FAILURE.getDesc());
+					LOGGER.error("PartnerAuthenticationFailedException {}", ErrorCode.AUTHENTICATION_FAILURE.getDesc());
 				} else {
 					resultModel.setCode(ErrorCode.SYSTEM_ERROR.getCode());
 					resultModel.setMsg(ErrorCode.SYSTEM_ERROR.getDesc());
-
+					LOGGER.error("error", e);
 				}
-				LOGGER.error("error", e);
+
 				ReporterHolder.incException(String.format("%s.%d", e.getClass().getSimpleName(), resultModel.getCode()));
 				printJson(httpServletResponse, resultModel);
 				return modelAndView;

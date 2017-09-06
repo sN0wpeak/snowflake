@@ -1,5 +1,7 @@
 package io.shuidi.snowflake.core.service;
 
+import org.springframework.core.style.ToStringCreator;
+
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
 
@@ -23,6 +25,7 @@ public class Partner {
 	public void setRangeCount(Integer rangeCount) {
 		this.rangeCount = rangeCount;
 	}
+
 	@NotNull
 	private boolean useAuth;
 
@@ -60,7 +63,7 @@ public class Partner {
 
 	@Override
 	public String toString() {
-		return "BizInfo{" +
+		return "Partner{" +
 		       "start=" + start +
 		       ", partnerKey='" + partnerKey + '\'' +
 		       ", partnerSecret='" + partnerSecret + '\'' +
