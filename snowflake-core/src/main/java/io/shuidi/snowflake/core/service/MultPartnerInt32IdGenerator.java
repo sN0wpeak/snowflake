@@ -73,7 +73,6 @@ public class MultPartnerInt32IdGenerator {
 						bizInfo.getRangeCount()));
 			}
 		}
-
 	}
 
 	public int generateId(String partnerKey) {
