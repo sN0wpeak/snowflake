@@ -89,7 +89,7 @@ public final class SnowflakeIDGenerator implements IDGenerator {
 			ReporterHolder.exceptionCounter.inc();
 			throw new IllegalArgumentException();
 		}
-		SnowflakeIDGenerator.workerId = 1;
+		SnowflakeIDGenerator.workerId = workerId;
 	}
 
 	/**
