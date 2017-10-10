@@ -1,3 +1,2 @@
-# 简介
-全局ID生成服务,基于snowflake。
-
+# snowflake
+分布式全局ID生成器，支持32位和64位ID生成。
