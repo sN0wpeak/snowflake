@@ -9,7 +9,7 @@
 
 2. redis: 类似于数据库
 
-# ID生成器
+# ID生成器 (待完善)
 ## 64位
 ID生成策略采用twitter的[snowflake](https://github.com/twitter/snowflake)，本系统在此之上提供了自动分配workId的功能。
 ### 自动分配workId流程
@@ -56,13 +56,20 @@ curl http://127.0.0.1:8080/api/snowflake/add-biz -H 'Content-Type:application/js
 
 * test
 ```bash
-
+# 64位ID获取
 curl http://127.0.0.1:8080/api/snowflake/get-id?partnerKey=account
 
 {"code":0,"data":{"id":126406183027220480},"msg":""}
 
+# 32位ID获取
 curl http://127.0.0.1:8080/api/snowflake/get-id32?partnerKey=account
 
 {"code":0,"data":{"id":48150001},"msg":""}
 
 ```
+
+# 集群部署
+1. nginx
+最简单的方式是使用nginx做负载均衡。
+
+2. 注册中心方式 (待完善)
