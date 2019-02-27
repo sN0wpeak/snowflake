@@ -33,17 +33,4 @@
 		</dependencies>
 	</dependencyManagement>
 
-	<distributionManagement>
-		<repository>
-			<id>nexus</id>
-			<name>Releases</name>
-			<url>http://nexus.vpn.shuidihuzhu.cn/repository/maven-releases</url>
-		</repository>
-		<snapshotRepository>
-			<id>nexus</id>
-			<name>Snapshot</name>
-			<url>http://nexus.vpn.shuidihuzhu.cn/repository/maven-snapshots</url>
-		</snapshotRepository>
-	</distributionManagement>
-
 </project>
